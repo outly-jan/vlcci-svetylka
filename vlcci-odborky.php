@@ -1482,9 +1482,9 @@ class VlcciOdborky {
 	}
 
 	private function app_base_field(): string {
-		$base = wp_get_referer() ?: home_url( '/' );
-		$clean = remove_query_arg( [ 'vo', 'dite_id', 'odborka_id', 'sestka_id', 'oddil_id', 'edit_id', 'edit_o', 'edit_s' ], $base );
-		return '<input type="hidden" name="_vo_app_base" value="' . esc_attr( $clean ) . '">';
+		global $post;
+		$base = get_permalink( $post ) ?: home_url( '/' );
+		return '<input type="hidden" name="_vo_app_base" value="' . esc_attr( $base ) . '">';
 	}
 
 	public function handle_app_post(): void {
