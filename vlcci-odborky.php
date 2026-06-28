@@ -1854,8 +1854,14 @@ class VlcciOdborky {
 			if ( $can_edit ) {
 				echo '<div class="voa-ukol-inputs"><label>Datum <input type="date" name="datum_' . $u->id . '" value="' . esc_attr( $u->datum_splneni ?? '' ) . '" class="voa-input-date"></label>';
 				echo '<label>Poznámka <input type="text" name="pozn_' . $u->id . '" value="' . esc_attr( $u->poznamka ?? '' ) . '" class="voa-input-note" placeholder="volitelná"></label></div>';
+				if ( $done && $u->vedouci_id ) {
+					$v = get_userdata( (int) $u->vedouci_id );
+					if ( $v ) echo '<div class="voa-ukol-vedouci">Uznal/a: ' . esc_html( $v->display_name ) . '</div>';
+				}
 			} elseif ( $done ) {
-				echo '<div class="voa-ukol-datum">' . esc_html( date_format( date_create( $u->datum_splneni ), 'd. m. Y' ) ) . ( $u->poznamka ? ' — ' . esc_html( $u->poznamka ) : '' ) . '</div>';
+				$vedouci_str = '';
+				if ( $u->vedouci_id ) { $v = get_userdata( (int) $u->vedouci_id ); if ( $v ) $vedouci_str = ' · Uznal/a: ' . $v->display_name; }
+				echo '<div class="voa-ukol-datum">' . esc_html( date_format( date_create( $u->datum_splneni ), 'd. m. Y' ) ) . ( $u->poznamka ? ' — ' . esc_html( $u->poznamka ) : '' ) . esc_html( $vedouci_str ) . '</div>';
 			}
 			echo '</div></div>';
 		}
@@ -2311,6 +2317,7 @@ class VlcciOdborky {
 .voa-input-date,.voa-input-note{padding:4px 7px;border:1px solid #ccc;border-radius:3px;font-size:12px}
 .voa-input-date:focus,.voa-input-note:focus{outline:none;border-color:#1a5c2a}
 .voa-ukol-datum{font-size:12px;color:#555;margin-top:4px}
+.voa-ukol-vedouci{font-size:11px;color:#888;margin-top:2px}
 /* Dashboard rows */
 .voa-sestky-list{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
 .voa-sestka-item{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f8faf8;border:1px solid #ddd;border-radius:4px;text-decoration:none;color:#333;transition:border-color .15s}
