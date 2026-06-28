@@ -1512,10 +1512,12 @@ class VlcciOdborky {
 		$d = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE id=%d", $dite_id ) );
 		if ( ! $d || ! $this->can_edit_sestka( (int) $d->sestka_id ) ) wp_die( 'Přístup odepřen.' );
 		$ukoly      = $wpdb->get_results( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}vo_ukoly WHERE odborka_id=%d", $odborka_id ) ) ?: [];
-		$vedouci_id = get_current_user_id();
+		$current_uid = get_current_user_id();
 		foreach ( $ukoly as $u ) {
-			$datum = sanitize_text_field( $_POST[ 'datum_' . $u->id ] ?? '' );
-			$pozn  = sanitize_textarea_field( $_POST[ 'pozn_' . $u->id ] ?? '' );
+			$datum      = sanitize_text_field( $_POST[ 'datum_' . $u->id ] ?? '' );
+			$pozn       = sanitize_textarea_field( $_POST[ 'pozn_' . $u->id ] ?? '' );
+			$vid_raw    = intval( $_POST[ 'vedouci_' . $u->id ] ?? 0 );
+			$vedouci_id = $vid_raw > 0 ? $vid_raw : $current_uid;
 			if ( $datum ) {
 				$wpdb->query( $wpdb->prepare(
 					"INSERT INTO {$wpdb->prefix}vo_plneni (dite_id,ukol_id,datum_splneni,poznamka,vedouci_id) VALUES (%d,%d,%s,%s,%d)
@@ -1843,7 +1845,12 @@ class VlcciOdborky {
 		else echo ' <span class="voa-muted">(min. ' . $p['min'] . ')</span>';
 		echo '</span></div></div></div>';
 
-		if ( $can_edit ) { echo '<form method="post" class="voa-form">'; echo $this->app_nonce( 'save_plneni' ) . $this->app_base_field(); echo '<input type="hidden" name="_vo_app_action" value="save_plneni"><input type="hidden" name="dite_id" value="' . $dite_id . '"><input type="hidden" name="odborka_id" value="' . $odborka_id . '">'; }
+		if ( $can_edit ) {
+			echo '<form method="post" class="voa-form">';
+			echo $this->app_nonce( 'save_plneni' ) . $this->app_base_field();
+			echo '<input type="hidden" name="_vo_app_action" value="save_plneni"><input type="hidden" name="dite_id" value="' . $dite_id . '"><input type="hidden" name="odborka_id" value="' . $odborka_id . '">';
+			$wp_users = get_users( [ 'orderby' => 'display_name', 'fields' => [ 'ID', 'display_name' ] ] );
+		}
 
 		echo '<div class="voa-ukoly-list">';
 		foreach ( $p['ukoly'] as $u ) {
@@ -1852,12 +1859,15 @@ class VlcciOdborky {
 			echo '<div class="voa-ukol-num">' . (int)$u->poradi . '</div>';
 			echo '<div class="voa-ukol-body"><div class="voa-ukol-nazev">' . esc_html( $u->nazev ) . '</div>';
 			if ( $can_edit ) {
+				$sel_vid = $done && $u->vedouci_id ? (int)$u->vedouci_id : get_current_user_id();
 				echo '<div class="voa-ukol-inputs"><label>Datum <input type="date" name="datum_' . $u->id . '" value="' . esc_attr( $u->datum_splneni ?? '' ) . '" class="voa-input-date"></label>';
-				echo '<label>Poznámka <input type="text" name="pozn_' . $u->id . '" value="' . esc_attr( $u->poznamka ?? '' ) . '" class="voa-input-note" placeholder="volitelná"></label></div>';
-				if ( $done && $u->vedouci_id ) {
-					$v = get_userdata( (int) $u->vedouci_id );
-					if ( $v ) echo '<div class="voa-ukol-vedouci">Uznal/a: ' . esc_html( $v->display_name ) . '</div>';
+				echo '<label>Poznámka <input type="text" name="pozn_' . $u->id . '" value="' . esc_attr( $u->poznamka ?? '' ) . '" class="voa-input-note" placeholder="volitelná"></label>';
+				echo '<label>Uznal/a <select name="vedouci_' . $u->id . '" class="voa-input-vedouci">';
+				foreach ( $wp_users as $wu ) {
+					$sel = (int)$wu->ID === $sel_vid ? ' selected' : '';
+					echo '<option value="' . (int)$wu->ID . '"' . $sel . '>' . esc_html( $wu->display_name ) . '</option>';
 				}
+				echo '</select></label></div>';
 			} elseif ( $done ) {
 				$vedouci_str = '';
 				if ( $u->vedouci_id ) { $v = get_userdata( (int) $u->vedouci_id ); if ( $v ) $vedouci_str = ' · Uznal/a: ' . $v->display_name; }
@@ -2318,6 +2328,7 @@ class VlcciOdborky {
 .voa-input-date:focus,.voa-input-note:focus{outline:none;border-color:#1a5c2a}
 .voa-ukol-datum{font-size:12px;color:#555;margin-top:4px}
 .voa-ukol-vedouci{font-size:11px;color:#888;margin-top:2px}
+.voa-input-vedouci{font-size:13px;padding:3px 6px;border:1px solid #b8d4be;border-radius:4px;background:#fff;color:#222;cursor:pointer}
 /* Dashboard rows */
 .voa-sestky-list{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
 .voa-sestka-item{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f8faf8;border:1px solid #ddd;border-radius:4px;text-decoration:none;color:#333;transition:border-color .15s}
