@@ -59,9 +59,10 @@ class VlcciOdborky {
 
 		dbDelta( "CREATE TABLE {$wpdb->prefix}vo_odborky (
 			id int NOT NULL AUTO_INCREMENT,
-			typ enum('vlcata','svetlusky') NOT NULL,
+			typ enum('vlcata','svetlusky','oba') NOT NULL DEFAULT 'oba',
 			nazev varchar(200) NOT NULL,
 			min_ukolu tinyint NOT NULL DEFAULT 8,
+			obrazek varchar(100) DEFAULT NULL,
 			PRIMARY KEY (id)
 		) $c;" );
 
@@ -85,6 +86,427 @@ class VlcciOdborky {
 		) $c;" );
 
 		update_option( 'vo_db_version', '1' );
+		$this->seed_odborky();
+	}
+
+	private function seed_odborky(): void {
+		global $wpdb;
+		if ( (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_odborky" ) > 0 ) return;
+
+		// [ nazev, [ ukoly... ], obrazek ]
+		$odborky = [
+			[ 'Divadelník', [
+				'Scénka. Se svou šestkou zahrajeme scénku z historie skautingu (světového, českého nebo místního).',
+				'Zvuk. Doplním scénku vhodnými zvukovými efekty (např. pokličkami bouřku, klapáním koně) nebo hrou na hudební nástroj.',
+				'Maska. Vytvořím si masku pohádkové nebo nadpřirozené postavy.',
+				'Fantazie. Vymyslím příběh jednoho obyčejného předmětu, který používám denně, a povyprávím ho šestce.',
+				'Pantomima. Vytvořím si pro kamarády a kamarádky v šestce hádanku v pantomimě – deset různých povolání nebo pohádkových postav.',
+				'Inspirace. Vyberu si oblíbenou knížku a spolu s šestkou ztvárním její část jako živé obrazy.',
+				'Scéna. Vyberu si oblíbený příběh a pro jeho hlavní postavu vytvořím model prostředí, ve kterém se postava pohybuje (model znamená 3D, lze zvolit z mnoha technik, např. koláž, hlína, modelína, papír, špejle, přírodniny…).',
+				'Na jevišti. Zahraju ve dvou divadelních představeních.',
+				'Maňásci. Vyrobím si dva maňásky a zahraju s nimi představení.',
+				'Návštěva divadla. Navštívím dvě představení v divadle. Svůj zážitek popíšu šestce.',
+			] ],
+			[ 'Fotograf', [
+				'Fotografie místa. Najdu v obci změnu, která se mi líbí, vyfotím ji a fotku ukážu šestce (např. opravení kašny, vytvoření nového parku, hřiště). Proč si myslím, že ke změně došlo?',
+				'Fotografie. Vyfotím svoji šestku, potom fotku vytisknu a vyvěsím v klubovně.',
+				'Výprava. Na výpravě budu fotit a vyberu fotky, které použiji do kroniky nebo na web.',
+				'Filtr. Vyfotím tři fotky a na každou použiju libovolný filtr (například černobílý, vinětace apod.).',
+				'Rychlost. Zkusím si vyfotit stejnou fotku akční hry šestky s rychlým časem (pod 1/100 vteřiny) a s pomalým časem (nad 1/10 vteřiny) a popíšu rozdíl mezi výsledky.',
+				'Zaostření. Vyfotím dvě stejné fotky, pokaždé se zaostřením na jinou vzdálenost. Porovnám ostrost jednotlivých předmětů.',
+				'Režimy focení. Na svém nebo půjčeném fotoaparátu či smartphonu ukážu vedoucím, jak se dá změnit režim focení. Vysvětlím, kdy a proč měním režimy focení (např. v muzeu, za šera).',
+				'Panorama. Vyfotím panorama z jednotlivých snímků a složím ho.',
+				'Kompozice. Vyberu si tři objekty vedle sebe a vyfotím je ve třech různých uspořádáních. Vyberu to, které se mi líbí více, a vysvětlím proč.',
+				'Společnost. Při výpravě nebo na táboře určím moment, kdy není vhodné fotit, a moment, který je sice vhodné vyfotit, ale fotku nezveřejňovat. Vysvětlím, proč si to myslím.',
+			] ],
+			[ 'Hudebník', [
+				'Poslech. Se zavřenýma očima si se šestkou poslechneme písničku. Poté si vzájemně řekneme, co se nám na ní líbilo a nelíbilo.',
+				'Hra na hudební nástroj. Zahraju na libovolný hudební nástroj tři jednoduché skladby.',
+				'Můj nástroj. Představím šestce svůj hudební nástroj. Vysvětlím, jak o něj pečuju a jak se ladí.',
+				'Pravidelně cvičím. Dva týdny hraju na svůj nástroj každý den.',
+				'Noty. Zahraju skladbu z not ve správném tempu a se správnou dynamikou.',
+				'Vystoupení. Zahraju skladbu přiměřené obtížnosti před ostatními (např. na koncertě pro veřejnost, u táborového ohně, na besídce apod.).',
+				'Společné hraní. Vystoupím před ostatními s někým dalším, např. v triu, souboru nebo orchestru.',
+				'Koncert. Navštívím dva různé koncerty, z toho jeden, kde se hraje na můj nástroj. Šestku seznámím s jejich průběhem a popíšu, jak se mi koncerty líbily a proč.',
+				'Co poslouchám. Představím šestce interpreta/interpretku nebo skupinu hrající na můj nástroj včetně dvou ukázek.',
+				'Hudební skladatelé. Představím šestce jednoho českého a jednoho zahraničního hudebního skladatele či skladatelku včetně ukázky z jeho tvorby.',
+			] ],
+			[ 'Rukodělkář', [
+				'Papírová skládačka. Vyberu si a složím papírovou skládačku podle návodu (například loďku, vlaštovku, čepici, pohárek…) a vyzdobím ji.',
+				'Přírodní materiál. Vytvořím tři různé výrobky z přírodního materiálu, např. vyřežu píšťalku, upletu pomlázku, vyrobím adventní věnec.',
+				'Provázky a korálky. Zhotovím tři výrobky z provázků a korálků, např. udrhám náramek, navleču korále, vytvořím zvířátko z korálků, a některý z nich někomu daruji.',
+				'Společná tvorba. Vyrobím s kamarádem, kamarádkou či někým z rodiny předmět, který společně využijeme (např. draka, poličku, kalendář).',
+				'Pletení a háčkování. Upletu či uháčkuju si část oblečení. Pletu hladce i obrace, při háčkování využiju krátký a dlouhý sloupek.',
+				'Šití. Ušiju si dvě užitečné věci, např. obal na ešus, deník nebo pouzdro na pastelky.',
+				'Tuhnoucí hmota. Vyrobím z hmoty čtyři předměty, např. přívěsek z fima, užitečný předmět z keramiky, odlitek stopy ze sádry, dekoraci ze samotvrdnoucí hmoty.',
+				'Ozdobení textilu. Ozdobím tři různé textilní věci, např. nabatikuji tričko, vyšiju obrázek na sáček či tašku, vyšiju obrázek na obal stezky.',
+				'Nákup materiálu. Zjistím, co potřebuji na tvorbu svého výrobku, a dojdu si to s rodiči či vedoucí/m koupit.',
+				'Nová rukodělka. Připravím si s kamarádem či kamarádkou v šestce na schůzku krátkou rukodělku pro ostatní.',
+			] ],
+			[ 'Výtvarník', [
+				'Obrázek z přírodnin. Vytvořím v lese či na louce obrázek z přírodnin, které najdu okolo.',
+				'Inspiruji se přírodou. Najdu si přírodninu, která mi přijde zajímavá, a nakreslím ji zvětšenou (tužkou, uhlem, křídou nebo pastelkou).',
+				'Barevná paleta. Zkusím ke každé barvě palety (bílá, žlutá, oranžová, červená, růžová, fialová, zelená, modrá, hnědá, černá) najít přírodninu dané barvy.',
+				'Nálady a emoce. Namaluju dva obrazy vyjadřující dvě odlišné nálady či emoce na velký papír A2 (temperou, akrylovými barvami nebo akvarelem).',
+				'Fantazie. Vymyslím rostlinu nebo živočicha podle své fantazie, charakterizuji ho (kde žije, čím se živí…). Poskládám ho z papíru, nakašíruji nebo vytvořím z hlíny.',
+				'Experiment. Vyrobím štětec z neobvyklých materiálů (přírodních i člověkem vytvořených) a zkouším jeho stopu při malování. Vytvořím s ním pět různých obrázků.',
+				'Krása. Zvolím si místo ze svého okolí, které považuji za krásné. Pokusím se jeho krásu zachytit (např. pomocí několika fotografií, malovaných obrázků). Zaměřím se na detaily i celek. Představím místo ostatním.',
+				'Inspirace. Navštívím galerii, představím šestce jedno umělecké dílo nebo umělce či umělkyni, kteří mě zaujali.',
+				'Moje tvorba. Navštěvuji půl roku výtvarný či keramický kroužek.',
+				'Naše šestka. Libovolnou výtvarnou technikou ztvárním naši šestku.',
+			] ],
+			[ 'Zpěvák', [
+				'Poslech. Se zavřenýma očima si se šestkou poslechneme písničku. Poté si vzájemně řekneme, co se nám na ní líbilo a nelíbilo.',
+				'Zpěv. Zazpívám deset různých písní.',
+				'Zpěv s doprovodem. Zazpívám píseň s hudebním doprovodem.',
+				'Druhý hlas nebo kánon. Zazpívám k písni druhý hlas nebo kánon.',
+				'Nové písně. Naučím se dvě nové písně.',
+				'Vystoupení. Sólově zazpívám píseň přiměřené obtížnosti před ostatními (např. na koncertě pro veřejnost, u táborového ohně, na besídce apod.).',
+				'Hymny a večerka. Zazpívám českou hymnu, skautskou hymnu a večerku.',
+				'Zpěvník. Vedu si zpěvník a průběžně ho doplňuju.',
+				'Co poslouchám. Představím šestce oblíbeného zpěváka nebo oblíbenou zpěvačku. Pustím dvě ukázky.',
+				'Hudební představení. Navštívím dvě různá hudební představení (např. koncert, operní, operetní nebo muzikálové představení). Šestce povím, o čem představení byla a jak se mi líbila.',
+			] ],
+			[ 'Hvězdář', [
+				'Souhvězdí. S rojem/smečkou či rodinou pozoruji hvězdy. Zjistím název a tvar jednoho souhvězdí a vymyslím si jedno vlastní.',
+				'Příběhy. Vyberu si jeden příběh, který se týká některého souhvězdí. Příběh libovolně ztvárním (obrázek, scénka…) nebo převyprávím šestce.',
+				'Otáčivá mapa hvězdné oblohy. Vyzkouším otáčivou mapku a najdu podle ní na obloze tři souhvězdí, která ještě neznám.',
+				'Venuše. Poslechnu si nebo přečtu příběh, proč má Venuše i jiné názvy. Ukážu ji na obloze a doplním to krátkým vyprávěním o planetě a jejím obrázkem.',
+				'Měsíc. Večer ukážu šestce na obloze Měsíc. Pomocí koleček (třeba ze sušenek) vymodeluji jednotlivé fáze měsíce a vysvětlím, co znamenají. Společně určíme, v jaké fázi Měsíc právě teď je.',
+				'Sluneční soustava. Vytvořím model sluneční soustavy.',
+				'Návštěva. Navštívím hvězdárnu nebo planetárium. Připravím si dvě otázky, na které chci zjistit odpovědi. Během návštěvy se na ně zeptám.',
+				'Astronomická scénka. Připravím se šestkou scénku, která vysvětluje některý z astronomických jevů. Např. zatmění Slunce, Měsíce, rovnodennost nebo slunovrat.',
+				'Astronomický úkaz. Upozorním šestku na blížící se astronomický úkaz (zatmění Slunce, Měsíce, padání hvězd…). Zjistím, jak daný jev probíhá, a šestce to vysvětlím.',
+				'Knížka. Přečtu si dětskou knížku, která se věnuje hvězdám nebo vesmíru (např. ABC Hvězdáře, Jak kometa šla do světa).',
+			] ],
+			[ 'Chovatel', [
+				'Stopy zvířat. Najdu několik zvířecích stop (okousané listy nebo šišky, dutiny ve stromě, myší stezky, otisky v blátě…). Své nálezy zapíšu, nakreslím nebo vyfotím. Zjistím, kterým zvířatům by mohly patřit.',
+				'Péče o zvíře. Povím své šestce, co všechno obnáší péče o mé zvíře, čím je zajímavé a převyprávím nějaký s ním spojený zážitek.',
+				'Zvíře doma. Po domluvě s rodiči se dva týdny úplně sám/sama starám o naše domácí zvíře (krmení, bydlení, pohodlí…).',
+				'Chovatelský kroužek. Půl roku chodím na chovatelský kroužek. Vyberu si tři zajímavé informace o zvířeti nebo zážitky, které povím šestce.',
+				'Knížka. Přečtu si knížku o svém zvířeti a napíšu si pět informací, které jsem se dozvěděl/a.',
+				'Pozorování. Po určitou dobu budu pečlivě sledovat své zvíře. Ze sledování si vytvořím záznam (kresby, fotografie…).',
+				'Vztah zvířat k člověku. Popíšu chování svého zvířete, a pokud to lze, ukážu, co jsem ho naučil/a (naživo, na fotkách…).',
+				'Příchod zvířete. Zjistím, odkud se zvíře dostalo k nám domů nebo na kroužek. S rodiči či vedoucími na kroužku si popovídám, jak moje zvířata žijí nebo žila v přírodě, proč a jak se postupně ochočila.',
+				'Návštěva ZOO. S příbuznými nebo s oddílem navštívím ZOO. Vyberu si jedno zvíře a zkusím o něm zjistit, co všechno potřebuje ke svému životu, proč je chov v zajetí (ne)snadný a co ho ve volné přírodě ohrožuje.',
+				'Užitková zvířata. V rámci schůzky uspořádám ukázku nebo ochutnávku alespoň tří produktů od domácích zvířat a představím, jak se produkty získávají.',
+			] ],
+			[ 'Přírodověděc', [
+				'Co tu roste a žije. Vyberu si jedno prostředí (potok, rybník, louka, les…) a při jeho návštěvě zapíšu, nakreslím nebo vyfotím rostliny a živočichy, kteří zde žijí. Zjistím dvě zajímavé informace o organismu, který mě nejvíce zaujal.',
+				'Deset druhů. Najdu deset druhů rostlin, živočichů, hub nebo stromů, které znám a ukážu je šestce. Řeknu ostatním, co o nich vím (např. k čemu se dá část rostliny použít, zda je jedovatá, čím je zajímavá).',
+				'Experiment. Vyberu si přírodovědný pokus (např. klíčení semínek, mravenci měnící cestičku, otevírání šišek), který šestce ukážu a vysvětlím.',
+				'Chci vědět víc! Zúčastním se výletu, ve kterém se budeme seznamovat s přírodou (může to být exkurze, procházka s přírodovědným kroužkem…). Zjistím odpověď na otázku, která mě během výletu k tématu napadne.',
+				'Hledání informací. Pomocí atlasu, určovacího klíče, mobilní aplikace nebo internetu určím vybranou květinu, strom, keř, houbu, zvíře, souhvězdí, tvar mraku, horninu…, které vyberu spolu s vedoucím. Ke každému z určovaného naleznu důležitou informaci, díky které si novinku lépe zapamatuju.',
+				'Sbírání. Mám sbírku pojmenovaných vybraných přírodnin (šišek, usušených rostlin, ptačích per, nerostů…), kterou postupně rozšiřuju.',
+				'Přírodní zajímavost. Najdu v přírodě úkaz, který mě zaujme (zajímavě zvětralé horniny, hmyzí domeček, netradičně barevné květy, tajemné stopy…). Zkusím ho vysvětlit a ukážu ho šestce.',
+				'Stopy člověka v přírodě. V průběhu výpravy ukážu šestce místa, kde člověk přírodě škodí a kde naopak pomáhá. Během výpravy navrhnu, čím malým můžeme pomoci my, a uskutečníme to.',
+				'Vznik a zánik. Vytvořím několik navazujících obrázků přírody, kde něco vzniká a zaniká (např. fotky semenáčků a zetlelého stromu, vývoj žáby, hmyzu). Obrázky ukážu šestce a společně popíšeme pocity, které v nás vyvolávají.',
+				'Vztahy v přírodě. Blíže se seznámím s tím, jak v přírodě fungují vztahy mezi konkrétními rostlinami a živočichy, např. mšice a mravenci, červík v ovoci, strakapoud na stromě… Vymyslím příběh, do kterého svoje pozorování promítnu.',
+			] ],
+			[ 'Zahradník', [
+				'Barvy v přírodě. Najdu přírodniny v co nejvíce barvách. Ke které barvě se mi nepodařilo najít žádnou přírodninu a od které barvy jich bylo nejvíce?',
+				'Život rostliny. Vyberu si sazeničku rostliny. Připravím si vhodný prostor na zasazení (záhon, dostatečně velký květináč), vhodnou zeminu a rostlinu zasadím. O rostlinu se správně starám. Vytvořím plakát, kde zaznamenám (zapíšu, zakreslím, vyfotím) důležité momenty v jejím životě (kvetení, plod…).',
+				'Ochrana. Zjistím, co mé rostlině škodí a co jí naopak může pomoci. Informace zapracuji do krátkého příběhu, který odvyprávím šestce.',
+				'Světlo a teplota. Vyberu si dvě stejné rostliny. Jednu umístím na světlo a teplo, druhou do tmy a chladu. Týden budu obě pozorovat a každý den si zaznamenám, jak vypadají. Po týdnu ukážu šestce výsledky svého pokusu. Vysvětlím, jaký vliv světlo a teplota na rostliny mají.',
+				'Kypření půdy. Udělám díru do země (nebo se podívám do vykopané, např. při přípravě ohniště). Spočítám žížaly a vysvětlím, co tam dělají.',
+				'Pomoc. Starám se o rostlinu, která vypadá, že by bez mé pomoci zahynula. Zaznamenám si (např. pomocí fotografie) chvíli, kdy jsem se o ni začal/a starat, druhý den, po týdnu, po deseti dnech… a sérii fotografií ukážu šestce.',
+				'Neznámá. Najdu na zahradě nebo v zahradnictví rostlinu, o které toho moc nevím. Zjistím si, jak se jmenuje, co potřebuje ke svému životu a čím je zajímavá.',
+				'Pozoruji vznik. Vyberu si rostlinu, kterou nechám vyklíčit (např. řeřichu) na místě, které lze dobře pozorovat. Každý den si zaznamenám (zakreslím, vyfotím…), jak klíčení probíhá.',
+				'Pozoruji zánik. Vyberu si ovoce, které zahrabu do země. Vždy po týdnu zkontroluji a zaznamenám, co se se zahrabaným ovocem děje.',
+				'Jídlo. Připravím pokrm z mnou vypěstovaných nebo sesbíraných plodin, např. koláč, marmeládu, zeleninový salát, a dám ochutnat šestce.',
+			] ],
+			[ 'Cestovatel', [
+				'Výlet. S oddílem nebo rodinou se vydáme na dobrodružnou expedici někam, kde jsem ještě nebyl/a. Z výletu si můžu přinést pěknou přírodninu na památku. Návrhy, kudy a kam se vydat: podél řeky či potoka, podél okraje lesa, na rozhlednu, vyhlídku nebo vysoký kopec, podél hranice republiky, okresu nebo kraje.',
+				'Mapa výletu. Najdu si mapu místa, kam půjdeme na výlet. Během výletu na ní třikrát najdu, kde právě jsme.',
+				'Orientace v terénu. Při výletě popíšu šestce, podle čeho se dá orientovat, aby člověk našel správnou cestu (na turistické značce i bez ní).',
+				'Kolik kilometrů? Podle trasy výletu vypočtu, kolik km půjdeme. V rámci trasy alespoň 3× odpovím správně na otázku, kolik kilometrů ještě zbývá do cíle (s přiměřenou odchylkou).',
+				'GPS. Vyzkouším používat GPS při orientaci v terénu. Pomocí GPS dojdu na určené místo (např. najdu kešku) nebo projdu vyznačenou trasu.',
+				'Cestovatelský deník. Půl roku si vedu cestovatelský deník. Do něj si zapisuji, jaká místa jsem navštívil/a, kolik kilometrů jsem ušel/ušla a co jsem se nového dozvěděl/a.',
+				'Krabička zajímavostí. Půl roku sbírám různé zajímavosti, které na cestách potkám, a představím je šestce.',
+				'Buzola. Podle buzoly zorientuji mapu. Umím určit, kde je sever, jih, východ a západ.',
+				'Plánek k pokladu. V blízkosti tábořiště nebo klubovny schovám „poklad". Nakreslím plánek, podle kterého ho bude hledat moje šestka. Plánek je srozumitelný.',
+				'Vybavení. Sepíšu seznam vybavení na jednodenní výlet a víkendovou výpravu. Zabalím si věci podle svého seznamu. Po výletě i výpravě seznam podle zkušeností upravím. Pak se o seznam podělím s šestkou.',
+			] ],
+			[ 'Kuchař', [
+				'Chléb nebo jednohubky. Se šestkou nakoupíme suroviny a připravíme jednohubky nebo obložený chléb. Do rámečku nakreslím nebo jinak znázorním suroviny, které jsme použili.',
+				'Vaření. Na schůzce, výpravě nebo táboře uvařím společně s ostatními jednoduché jídlo bez použití polotovarů pro celou šestku.',
+				'Krájení. Nakrájím zeleninu na salát, cibuli do jídla. Rozkrojím housku, rohlík nebo bagetu. Nakrájím bochník chleba na rovné krajíce.',
+				'Mazání pečiva. Namažu nakrájené krajíce chleba máslem/marmeládou/pomazánkou. Krajíce jsou namazané rovnoměrně až do okrajů, nic není upatlané.',
+				'Prostření stolu. V domácích podmínkách připravím stůl na oběd nebo večeři pro rodinu, vyfotím a po jídle stůl zase uklidím.',
+				'Skladování potravin. Doma nebo na táboře pomohu uklidit nákup. Vše umístím tak, jak to daná potravina vyžaduje: do chladu, do temna, do sucha, do určené nádoby. U vybraných potravin najdu datum trvanlivosti a ukážu, kterou potravinu je potřeba do kdy spotřebovat.',
+				'Mytí nádobí. Doma nebo na výpravě třikrát umyju společné nádobí po hlavním jídle.',
+				'Brambory. Oškrábu půl kila brambor.',
+				'Vaření na ohni. Uvařím na ohni čaj a jedno jednoduché jídlo.',
+				'Zelenina. Připravím dvě zeleninová jídla – jedno ze syrové zeleniny a jedno ze zeleniny po tepelné úpravě – pro rodinu nebo šestku. Použiji vhodnou zeleninu, pořádně ji omyji a odkrojím části, které se nejí.',
+			] ],
+			[ 'Průvodce', [
+				'Zajímavost v obci. Představím šestce zajímavost z naší obce či okolí a řeknu, proč mě zaujala.',
+				'Model památky. Nakreslím nebo vyrobím model pro mne nejzajímavější památky v okolí mého bydliště.',
+				'Provázím. Provedu po okolí bydliště někoho z příbuzných nebo z oddílu. Ukážu jim a poutavě povyprávím o nejzajímavějších místech, která u nás jsou.',
+				'Dozvídám se nové informace. Vyberu si památku (kulturní či přírodní) v okolí bydliště a zjistím o ní co nejvíce pro mě nových informací. Na místo vyrazím s příbuznými nebo oddílem a tři zajímavé věci jim řeknu.',
+				'Památky. Navštívím alespoň pět památek v okolí bydliště. O každé z nich si napíšu zajímavou informaci do zápisníku.',
+				'Naše kořeny v obci. Zeptám se v rodině, jak dlouho v naší obci bydlíme, kdy jsme se přistěhovali, a poslechnu si vyprávění, jak obec tehdy vypadala.',
+				'Tradiční akce. Zúčastním se tradiční akce v naší obci. Vezmu na ni kamaráda či kamarádku nebo o ní vyprávím šestce.',
+				'Naše obec. Navštívím místní radnici nebo městský úřad. Zjistím, kdo je starostou či starostkou. Uvedu příklad, co vedení obce rozhodlo v poslední době.',
+				'Plánek. Nakreslím plánek okolí svého bydliště a zaznačím důležité budovy (např. zastávku, lékaře, potraviny, školu…).',
+				'Změny v okolí. Najdu místo (např. podle fotografie), které se za posledních pár let proměnilo. Zjistím, proč se tak stalo. Místo ukážu šestce nebo někomu jinému.',
+			] ],
+			[ 'Táborník', [
+				'Oheň. Pomůžu připravit oheň, zapálím ho a udržuji. Po ohni pomůžu uklidit.',
+				'Stavba stanu. Postavíme společně stan.',
+				'Zručnost. Zhotovím si pro sebe jednoduchou pomůcku na tábor (např. držák na ešus, poličku do stanu) nebo pomohu se stavbou či opravou táborové stavby.',
+				'Pomoc v kuchyni. Alespoň dvakrát v průběhu tábora budu oporou táborové služby v kuchyni. Samostatně vedu přidělenou činnost (např. přípravu snídaně, doplnění dřeva, krájení zeleniny).',
+				'Jak funguje táborový den. Vysvětlím, jak funguje táborový den, nástupy, jak probíhá hygiena, služby v kuchyni a další důležité věci.',
+				'Noční hlídky. Vykonám noční hlídku v době, kdy je tma, dle táborových pravidel. Správně předám hlídku dalšímu.',
+				'Pořádek. Během tábora si udržuji pořádek ve stanu, snažím se být ostatním vzorem. Starám se dobře o své věci. Půjčené táborové vybavení v pořádku vracím.',
+				'Táborové vzpomínky. Vedu si táborový deník, do kterého zapisuji, co jsme který den zažili, nebo se podílím na tvorbě oddílové kroniky.',
+				'Přespání pod širákem. Zjistím, jak lze v táborových podmínkách odhadnout počasí k přespání pod širákem. Po domluvě s vedením přespím pod širákem.',
+				'Táborový zážitek. Libovolně ztvárním svůj největší táborový zážitek tak, abych si ho mohl/a uchovat až do dospělosti. Nebo pojmenuji, co jsem se během tábora naučil/a nového, a tuto novou dovednost si zakreslím či zapíšu do zápisníku.',
+			] ],
+			[ 'Atlet', [
+				'Běh přes překážky. Zaběhnu opičí dráhu nebo překážkový běh.',
+				'Atletická abeceda. Zúčastním se atletické rozcvičky, která na závěr obsahuje atletickou abecedu (např. liftink, skipink, zakopávání, předkopávání, odpichy). Dva prvky si zapamatuji a představím je šestce.',
+				'Zlepšení v rychlostním běhu. Změřím si běh na vzdálenost asi 60 metrů. Startuji z nízkého startu na povely „připravit se – pozor – teď". Po dobu tří týdnů budu pravidelně trénovat. V běhu na vzdálenost 60 metrů si zlepším čas.',
+				'Zlepšení ve skoku dalekém (z místa nebo s rozběhem). Změřím si, jak daleko doskočím od místa odrazu, a týden budu pravidelně trénovat, abych se zlepšil/a.',
+				'Zlepšení v míření. Domluvím se s vedoucí/m a vyberu si cíl, na který budu mířit z určité vzdálenosti. Spočítám si, jakou mám úspěšnost z deseti pokusů. Po týdenním tréninku házení na cíl se v úspěšnosti zlepším.',
+				'Hod do dálky. Změřím si, jak daleko dohodím míčkem velikosti tenisáku či jeho náhradou (např. improvizovanou koulí). Pravidelně 14 dní trénuji a průběžně si zapisuji výsledky. Představím je šestce.',
+				'Běhací hra. Zahraji si běhací hru, při které uběhnu alespoň půl kilometru a maximálně jeden kilometr.',
+				'Obratnost. S kamarády a kamarádkami pětkrát navštívím dětské nebo přírodní hřiště.',
+				'Štafetový běh. Zúčastním se štafetového běhu s využitím štafetového kolíku nebo jeho obdoby. Tým má alespoň čtyři členy a délka tratě pro každého člena je minimálně 100 metrů.',
+				'Skákání přes švihadlo. Po domluvě s vedoucí/m si vyberu, jestli se naučím nový způsob přeskakování přes švihadlo (např. dvojskok, vajíčko pozadu), nebo vydržím skákat v kuse minutu snožmo bez chyby.',
+			] ],
+			[ 'Cyklista', [
+				'Dráha. Ujedu na kole, koloběžce nebo kolečkových bruslích vytyčenou dráhu.',
+				'Jízda na kole. Jezdím na kole bezpečně a ve vhodném oblečení. Během všech cest mám na sobě správně nasazenou přilbu. Za šera a za tmy používám světla. Šestce předvedu, jak se nasazuje přilba, používá přehazovačka, a ukážu reflexní prvky na svém kole.',
+				'Dopravní značky. Při jízdě na kole dávám pozor na značky. Podle předlohy (knížka, internet…) nakreslím dvě značky, které vidím nejčastěji.',
+				'Údržba kola. Své kolo udržuji čisté. Šestce představím své kolo a popíšu jeho vybavení. Ukážu jim, jak poznají, kdy je třeba namazat řetěz, dofouknout kolo, a předvedu, jak to udělat. Vysvětlím jim, jak si nastavit výšku sedla tak, aby se na kole dobře jelo.',
+				'Spadlý řetěz. Nasadím spadlý řetěz.',
+				'Cyklistická zdatnost. S oddílem nebo rodinou podniknu tři cyklovýpravy. Každá bude mít trasu delší než je dvojnásobek mého věku.',
+				'Cyklovýprava. Popíšu šestce, jakou výstroj potřebuji na jednodenní cyklovýpravu, a připevním ji na kolo, nebo zabalím do vhodného batohu.',
+				'Dopravní nehoda. Vysvětlím šestce, jak se zachovat při dopravní nehodě. Předvedu, jak přivolat pomoc.',
+				'Bezpečná jízda. Předvedu šestce, jaká nebezpečí nás můžou na trase potkat a na co si máme dát při jízdě na kole pozor. Můžu sehrát scénku, ukázat obrázky, ukázat na trase…',
+				'Závod. Zúčastním se jakéhokoliv cyklistického závodu.',
+			] ],
+			[ 'Plavec', [
+				'Plavání. Uplavu krátkou vzdálenost.',
+				'Více plaveckých způsobů. Uplavu druhým plaveckým způsobem 50 metrů.',
+				'Pod vodou. Uplavu pod vodou nejméně 5 metrů.',
+				'Předmět z hloubky. Vylovím předmět z místa, kde nestačím.',
+				'Plavání v oblečení. Uplavu v oblečení 15 metrů (dlouhý rukáv, dlouhé nohavice a lehké boty).',
+				'Šlapání vody. Minutu vydržím šlapat vodu na místě.',
+				'Dopomoc. Vyzkouším si dopomoc unavenému plavci (dopomoc jedním plavcem, letka, most). Zkouším to s někým, kdo je stejně velký jako já.',
+				'Skok a vstup do vody. Skočím do bezpečné vody po nohou.',
+				'Šipka. Skočím do bezpečné vody šipku.',
+				'Bezpečnost u vody. Napíšu (nakreslím) několik zásad, jak se mám chovat bezpečně u vody a jak se zachovat, když vidím, že se někdo topí.',
+			] ],
+			[ 'Polárník', [
+				'Proměna místa. Najdu pěkné místo v přírodě. Nakreslím, jak bude vypadat ve čtyřech ročních obdobích.',
+				'Hra se sněhem. Postavím s kamarády a kamarádkami stavbu ze sněhu (např. iglú, bobovou dráhu, sochu).',
+				'Bezpečnost. Na oddílovou akci v zimním počasí se správně obléknu. Popíšu, co dělat, abych neprochladl/a, a co si počít, když je mně nebo někomu jinému zima. Předvedu, jak přivolat pomoc v nouzi.',
+				'Ohleduplnost. Jsem si vědom/a, že při hrátkách na sněhu musím být ohleduplná/ý k druhým a chovám se tak (neházím jim sníh za krk, neberu čepice…). Vysvětlím šestce, proč se máme chovat ohleduplně k ostatním.',
+				'Zimní sportování. Půjdu bobovat či sáňkovat.',
+				'Sjezdovky nebo snowboard. Samostatně si nazuji i vyzuji boty. Vím, jak je mít utažené, pokud nemám sílu na jejich zapnutí, dokážu požádat o pomoc. Nasadím i sundám lyže (snowboard) a správně nasadím helmu (příp. páteřák). Samostatně a bezpečně nastoupím na vlek či lanovku, vyjedu nahoru a vystoupím. Bezpečně sjedu modrou sjezdovku. Pokud spadnu, postavím se.',
+				'Běžky. Samostatně si zapnu i sundám běžky. Během jednoho dne ujedu alespoň 12 km. Vyjdu kopec stromečkem nebo bokem, při klesání přibrzdím pluhem. Pokud spadnu, postavím se.',
+				'Bruslení. Samostatně si brusle obuji a zuji. Předvedu jízdu na bruslích popředu i pozadu, zastavím bez nárazu do mantinelu.',
+				'Zimní atletika. Udělám kotrmelec, uběhnu v hlubokém sněhu asi 50 metrů, hodím úspěšně sněhovou koulí na cíl, skočím do sněhu.',
+				'Závod. Zúčastním se libovolného zimního závodu nebo soutěže (sjezdovky, běžky, hokej…).',
+			] ],
+			[ 'Sportovec', [
+				'Chytání míče. Procvičím si házení a chytání míče, například při hře.',
+				'Rozcvičení před sportem. Před sportovním výkonem se rozcvičím. Do rozcvičení zařadím rozehřátí (např. krátký běh), protažení a uvolnění různých částí těla.',
+				'Běhání. Zahraju si se svou šestkou pět různých her, během kterých bude důležitým prvkem běh. Jednu běhací hru zorganizuji.',
+				'Vodní hrátky. Půjdu se třikrát koupat a pokaždé si vyzkouším něco nového (např. stojku ve vodě, skok z bloku, vodní hru).',
+				'Jízda s překážkami. Projedu překážkovou dráhu na kole, koloběžce, skejtu nebo kolečkových bruslích. Budou v ní zatáčky, brždění, objíždění překážky.',
+				'Míčová hra. Vyberu si míčovou hru, kterou hraju nejčastěji, a ukážu šestce ty věci, které mi z ní jdou nejlépe (např. driblink v basketbalu, vedení míče ve fotbalu, podání v přehazované).',
+				'Sport s pomůckami. Vyzkouším si sport se speciálním vybavením, např. ringo, badminton, florbal, stolní tenis, tenis, ragby, softball, petanque, lukostřelba. Spolu s vedoucí/m si stanovím malý cíl (třeba přesnost míření, délka hodu nebo podání), kterého dosáhnu.',
+				'Turistika. Během tří výletů ujdu opakovaně a bez problémů více kilometrů, než kolik je mi let.',
+				'Pravidelně cvičím. Pravidelně každý týden cvičím, školní tělocvik nepočítám. Šestce předvedu, co jsem se naučil/a nebo v čem jsem se zlepšil/a.',
+				'Tým. Se svou šestkou si zahraju týmovou sportovní hru. Potom spolu s vedoucí/m zhodnotím, jak se mi daří být týmovou hráčkou / týmovým hráčem.',
+			] ],
+			[ 'Čtenář', [
+				'Chování postav. V příběhu najdu příklad správného a nesprávného chování postav a napíšu je. Řeknu, jak toto chování ovlivnilo pokračování příběhu.',
+				'Seznam knížek. Zaznamenávám si, které knížky přečtu (název, autora nebo autorku, kdy jsem knihu četl/a, čím mě zaujala a jednu zajímavou myšlenku). Mám takto sepsáno alespoň deset knih.',
+				'Vyznám se v knihovně. Alespoň třikrát jsem navštívil/a knihovnu a půjčil/a jsem si z ní pokaždé knížku. Knížky vracím včas, pokud výjimečně ne, zaplatil/a jsem zpozdné. U libovolné knížky si prodloužím výpůjční dobu.',
+				'Doporučení. Doporučím kamarádovi nebo kamarádce knížku, kterou začne číst. Společně se pobavíme o tom, co se v knížce dělo.',
+				'Knižní inspirace. Přečtu si knížku, pak se podívám na její filmové nebo divadelní zpracování a vzájemně je porovnám.',
+				'Poezie. Vyberu si oblíbenou básničku, přečtu ji šestce, přednesu na besídce, nebo ji výtvarně ztvárním.',
+				'Jak vzniká knížka. Vyberu si knížku a zjistím, kdo se na jejím vzniku podílel (ilustrátor/ka, nakladatel, překladatel/ka…). Najdu si (např. na internetu), jak knihy vznikají.',
+				'Vyprávím děj. Vyberu si libovolnou knížku a její děj převyprávím šestce.',
+				'Čtu Světýlko. Vyberu z posledních dvou Světýlek zajímavý článek, který doporučím své šestce. Vysvětlím jim, proč by si ho měli přečíst.',
+				'Oblíbený spisovatel / oblíbená spisovatelka. Vyberu si oblíbeného autora/autorku knížek a zjistím informace z jeho/jejího života. Vytvořím plakát, který si umístím v pokojíčku nebo v klubovně.',
+			] ],
+			[ 'Historik', [
+				'Historický příběh. Vyberu si historický příběh nebo pověst z naší obce a převyprávím jej šestce nebo namaluji. Přečtu si nebo poslechnu jeden příběh, který jsem dosud neznal/a.',
+				'Notýsek plný památek. Navštívím alespoň pět památek (např. hrad, zříceninu, zámek, klášter, synagogu, skanzen, historické centrum libovolného města…). O každé si napíšu nějaké informace a nalepím si do notýsku její obrázek.',
+				'Provázení. Během procházky po našem městě či vesnici představím šestce nebo svojí rodině tři zajímavá místa, která jsou v okolí.',
+				'Státní svátky. Zjistím, jaké slavíme státní svátky a proč. Vyberu si jeden a připravím pro šestku jeho připomínku nebo oslavu.',
+				'Knížky o minulosti. Přečtu si dvě knížky věnující se historii (mohou být komiksové) a vyberu si alespoň pět pro mě nových informací, které řeknu ostatním.',
+				'Po stopách skautingu. Poslechnu si, podívám se nebo si přečtu vyprávění o vzniku skautingu (u nás nebo ve světě), které pak převyprávím někomu dalšímu.',
+				'Historická osobnost. Vyberu si nějakou historickou osobnost, která mě zaujala. Něco si o jejím životě zjistím a vysvětlím ostatním, proč bychom si z ní měli (nebo neměli) vzít příklad.',
+				'Výlet do minulosti. Vyberu si, v jaké době bych chtěl/a žít, kdybych nežil/a právě teď. Napíšu si alespoň pět věcí, v čem se liší od současnosti.',
+				'Stará řemesla. Vyzkouším si dvě řemesla, která dříve byla běžná a dnes už zanikla nebo zanikají. Zkusím objevit, zda se v okolí tomuto řemeslu někdo věnuje, a navštívím ho.',
+				'Oddílový den. Napíšu záznam o jednom dni, který prožil náš oddíl společně. Napíšu ho tak, aby si ho mohli přečíst světlušky a vlčata za pět let a pochopili z toho, jak tenkrát oddílový den vypadal.',
+			] ],
+			[ 'Jazykář', [
+				'Pantomima. Předvedu, jak bych beze slov vyjádřil/a tři z těchto pocitů: mám někoho rád/a; jsem zklamaný/á; jsem s někým rád/a; jsem součástí skupiny; s něčím nesouhlasím; někoho podporuji; mám strach.',
+				'Návštěva cizí země. Při výletu do zahraničí použiji cizí jazyk (např. koupím vstupenku, lístek na vlak, zeptám se na cestu…).',
+				'Učím se. Cizímu jazyku se věnuji i mimo školu (např. chodím půl roku na kroužek, opakovaně si povídáme v cizím jazyce se sourozenci či rodiči, podívám se na několik pohádek v cizím jazyce s titulky…).',
+				'Knížka. Přečtu si jakoukoli knížku či komiks v cizím jazyce.',
+				'Mluvím. Během jednoho dne na výpravě nebo táboře se snažím co nejvíce komunikovat v cizím jazyce.',
+				'Jazykové pexeso. Vytvořím jednoduché pexeso, kde se budou přiřazovat slova v cizím jazyce k obrázkům. Pexeso si v šestce zahrajeme.',
+				'Překlad písničky. Najdu si oblíbenou písničku v cizím jazyce a její překlad. Pustím ji šestce, nechám je hádat, o čem je, a pak jim převyprávím děj.',
+				'Dívám se. Při výpravě hledám slova napsaná cizím jazykem. Zkusím je přečíst nahlas. U těch, kterým nerozumím, poprosím o překlad někoho z vedoucích nebo si ho zjistím jinak.',
+				'V cizím jazyce. Na týden si nastavím mobil nebo jiné zařízení, které používám, do cizího jazyka.',
+				'Jiná země. Najdu na mapě zemi, kam se chci jet podívat. S pomocí zjistím, jakým jazykem se v dané zemi mluví a naučím se 5 slovíček v daném jazyce. Tato slovíčka a 3 zajímavé informace o dané zemi představím šestce.',
+			] ],
+			[ 'Reportér', [
+				'Hledání informací. S pomocí vedoucí/ho si vyberu otázku, na kterou neznám odpověď (např. Je vesmír nekonečný? Bude zítra pršet?). Najdu odpovědi ve dvou různých zdrojích a výsledky porovnám. Řeknu, jestli odpovědím věřím a proč.',
+				'Reportáž z výpravy. Napíšu článek o výpravě. Může to být do oddílového časopisu nebo i jinam. Článek doplním obrázky, fotkami a rozhovory s ostatními členy a členkami šestky (co říkají o výpravě, jak se jim líbila, jaké z ní mají zážitky).',
+				'Starám se o kroniku. Do kroniky, na oddílový web apod. zaznamenám tři akce (schůzku, den na táboře, výlet…). Záznamy dodám včas a bez faktických chyb.',
+				'Rozhovor. Udělám rozhovor s člověkem, kterého si vážím. Na rozhovor se připravím: o tématu si dopředu něco zjistím, nachystám si otázky, které chci položit. Odpovědi si zaznamenám a rozhovor zveřejním (např. nástěnka, oddílový časopis).',
+				'Různé pohledy. Zajímavou zprávu, kterou jsem viděl/a např. ve Zprávičkách (ČT Déčko), si najdu i v novinách nebo na internetu a obě porovnám.',
+				'Aktuální zprávy. Na třech schůzkách vyprávím šestce, co se aktuálně děje v našem městě, ČR nebo ve světě. Vždy uvedu zdroj, kde jsem informaci získal/a, a co mi na ní přijde důležité.',
+				'Návštěva. Navštívím budovu rozhlasu, televize nebo redakce novin. Ostatním v šestce povím, co jsem se dozvěděl/a zajímavého.',
+				'Anketa. Zjistím nejméně od deseti lidí odpověď na jednu otázku, kterou řešíme v oddíle, ve škole či v mém okolí. Které odpovědi převažují? Proč to tak je?',
+				'Redaktor/ka Světýlka. Pošlu příspěvek do tohoto časopisu (např. obrázek, fotka, článek).',
+				'Foto a video. Pořídím z akce fotoreportáž nebo natočím video a na nejbližší schůzce výsledek předvedu šestce.',
+			] ],
+			[ 'Sběratel', [
+				'Sbírka. Vytvořím si sbírku přírodnin různých velikostí, tvarů a barev. Nalezené přírodniny správně pojmenuji nebo jim vymyslím vlastní názvy.',
+				'Moje sbírka. Povím příběh nebo sehraju scénku, jak jsem začal/a sbírat, jak dlouho už sbírám a proč.',
+				'Uložení sbírky. Vytvořím si prostor, kde budu mít sbírku uloženou (pěkná krabice, polička…). Šestce vysvětlím, jak sbírku chráním před poničením.',
+				'Popisky. Všechny předměty sbírky mám popsané (podle povahy sbírky např. název, kdy jsem daný exponát získal/a, proč je důležitý).',
+				'Nejcennější exponát. Vyberu ze své sbírky předmět, který považuji za nejcennější, a vysvětlím šestce, proč si ho tolik vážím.',
+				'Ukázka sbírky. Vezmu část své sbírky na schůzku a představím jednotlivé předměty šestce.',
+				'Články. Přečtu si dva články, které se věnují tématu mé sbírky, a dozvím se z nich něco nového.',
+				'Rozšiřování sbírky. Řeknu šestce, kde a jak předměty do sbírky získávám.',
+				'Další sbírka. Vyberu si novou věc na sbírání a začnu ji sbírat. Vytvořím pro ni místo na uložení a připravím popisky.',
+				'Návštěva sbírky. Navštívím kamaráda nebo kamarádku, který/á má sbírku se stejným tématem, nebo navštívím výstavu s tématem mé sbírky.',
+			] ],
+			[ 'Zdravotník', [
+				'Telefonát. V hraném telefonátu si vyzkouším přivolat pomoc k různým situacím. Do telefonu řeknu vše, co je potřeba. Jsem na procházce a najdu člověka, který hodně krvácí; Jsem na výletě a vidím hořet zahradní chatku; Jedu na kole a přijedu k dopravní nehodě (srážka dvou aut).',
+				'Seznam zranění. Vytvořím si seznam úrazů, které zvládnu ošetřit (vzhledem ke svému věku a dovednostem), a u kterých požádám o pomoc dospělého. Seznam ukážu vedoucím nebo rodičům.',
+				'Rychlost reakce. Vím, kdy musím na zranění reagovat okamžitě a kdy počkat na dospělého. Pomocí scénky sehraju tři příklady situací se zraněním, které vyžadují moji okamžitou reakci. Stejným způsobem předvedu tři příklady, kdy počkám na dospělého a seznámím ho se situací.',
+				'Předcházení nemocem. Vysvětlím šestce, proč je důležité si pravidelně čistit zuby, kdy je potřeba si mýt ruce, proč je důležitá hygiena celého těla a jaká voda a jídlo jsou bezpečné ke konzumaci.',
+				'Předcházení úrazům. Zkusím přijít na to, jaké úrazy se mohou stát při poledním klidu, při oblíbené hře, sportu nebo noční bojovce. Vyberu si jeden takový úraz a zkusím vymyslet opatření, jak mu předejít.',
+				'Popálenina. Na výpravě nebo na táboře najdu situace, kdy se můžeme popálit. U jedné popíšu, jak tomu předejít a jak popáleninu ošetřit.',
+				'Hmyz. Poznám klíště, včelu a vosu. Popíšu, co budu dělat, pokud mě daný hmyz kousne nebo bodne. Vysvětlím šestce, čím je každý z nich nebezpečný.',
+				'Alergie. Zeptám se nejbližších kamarádů a kamarádek, zda jsou na něco alergičtí. Pokud ano, nechám si od nich vyprávět, co alergii spouští, jak probíhá a jak ji ošetřit.',
+				'Dívám se. Na výpravě nebo dva dny na táboře sleduju vedoucí, jak ošetřují drobná zranění ostatním. Poprosím vedoucí, aby mi ukázali, co mají v lékárničce.',
+				'I smutek bolí. Mám pochopení pro kamarády a kamarádky, kterým je smutno. Zeptám se rodičů nebo vedoucích, jakými způsoby jim mohu pomoct a kdy mám o pomoc říci dospělému člověku.',
+			] ],
+			[ 'Ajťák', [
+				'Email. Napíšu e-mail vedoucí/mu (omluvím se ze schůzky, mám dotaz k výpravě…).',
+				'Z čeho je počítač. Najdu na internetu obrázky základních součástí, ze kterých se skládá stolní počítač nebo notebook. Obrázky uložím a vytvořím dokument s jejich popisky. Vše spolu s někým z vedení oddílu či příbuzných vytisknu. Na schůzce obrázky součástí počítače sestavíme k sobě, jak jsou ve skutečném počítači, a šestce řeknu, k čemu která součást slouží.',
+				'Nové slovo. V článku o počítačích najdu jedno slovo, kterému nerozumím. Zkusím ho vyhledat na internetu a vysvětlit vedoucím nebo rodičům, co znamená.',
+				'Počítačová hra. Najdu počítačovou hru, která pomáhá procvičovat znalosti, a zahrajeme si ji s kamarádkou nebo kamarádem.',
+				'Virus. Zjistím, co je to počítačový virus. Nakreslím obrázek, sehraji scénku nebo převyprávím příběh, který ukazuje, jak se virus může dostat do počítače.',
+				'Kyberšikana. Vysvětlím šestce, co je to kyberšikana, a dohromady s vedoucími vymyslíme, jak na ni reagovat.',
+				'Klávesnice. Seženu starou klávesnici, vyloupu z ní písmenka a zkusíme se šestkou poskládat co nejvíce slov bez opakovaného použití. Potom zkusíme klávesnici složit do původního stavu a zkusím vysvětlit, proč jsou písmena poskládaná právě takto.',
+				'Průzkum. O místě, kam půjdeme na oddílovou výpravu nebo rodinný výlet, vyhledám na internetu co nejvíce informací. Vytisknu je a ukážu ostatním.',
+				'Zdraví. Ztvárním obrázkem, hranou scénkou, videem nebo i jinak, co se stane, když budu moc dlouho sedět u počítače nebo tabletu. Výsledek ukážu šestce.',
+				'Programování. Vyzkouším si něco naprogramovat. Vysvětlím, jak by to, co jsem programoval/a, mělo fungovat.',
+			] ],
+			[ 'Kutil', [
+				'Vyrábění. Společně vyrobíme předmět pro šestku.',
+				'Nářadí. Nové nářadí, se kterým jsem ještě nepracoval/a, alespoň dvakrát správně použiju. Pracuju s ním bezpečně. Po práci ho vrátím na své místo. Může se jednat např. o kladivo, kleště, dláto, nebozez, šroubovák, pilu nebo sekeru.',
+				'Oprava a vylepšení. Doma nebo v klubovně po dohodě s rodiči či s vedením oddílu opravím rozbitou věc nebo jinou věc vylepším.',
+				'Funkční model. Vytvořím funkční model, např. draka, který bude létat, nebo mlýnek na potoce, který se bude točit.',
+				'Prostorové modely. Zhotovím dva prostorové modely, třeba táborový stan nebo známý hrad.',
+				'Sádra. Vytvořím sádrové odlitky a vymaluju je.',
+				'Recyklace. Ze starých věcí vytvořím dva výrobky. Mohu použít PET lahve, oblečení, plechovky, sklenice, noviny a další.',
+				'Řezbářství. Zhotovím dva výrobky ze dřeva, např. táborové cedulky, píšťalku.',
+				'Obsluha přístroje. Vyměním či pomůžu vyměnit např. baterie (do baterky, hračky…), nástavec (v kuchyňském robotu, akušroubováku…) apod.',
+				'Pracuji bezpečně. Ukážu, jak ošetřím základní poranění, která se mohou vyskytnout při práci s nástroji (říznutí, zadřená tříska, lehká popálenina…).',
+			] ],
+			[ 'Poutník za pravdou', [
+				'Slib. Jeden den se více než obvykle soustředím na dodržování slibu. Večer se zamyslím, jak se mi ho dařilo plnit. Svá zjištění jakkoliv ztvárním. O plnění si popovídám s vedoucí/m.',
+				'Pravda. Zjistím aspoň od pěti lidí, co si představují pod slovem pravda. A pak napíšu, řeknu nebo nakreslím, co si o tomto svém zjištění myslím.',
+				'Články ze Světýlka. Vyhledám v časopise Světýlko články, které se věnují slibu a zákonu. Články si vystříhám, ofotím, vyfotím nebo vypíšu zajímavé myšlenky. Ukážu a vysvětlím šestce, proč jsem si je vybral/a.',
+				'Pravda v písničkách. Vyberu si písničku, která se týká pravdy. Zahraju ji, nebo ji pustím šestce, a svými slovy řeknu, o čem je.',
+				'Můj vzor. Vyberu si člověka, kterého si vážím pro to, že udělal něco důležitého pro ostatní. Vytvořím pomocí obrázků a textů plakát o něm. Bude na něm, proč si ho vážím a z čeho si od něj můžu vzít příklad. Plakát si pověsím na místo, kde na něj dobře uvidím.',
+				'Dobro a zlo. Vyberu si pohádku a převyprávím ji šestce. Řeknu, co je v pohádce dobro a zlo a jaké poučení z ní plyne.',
+				'Na straně dobra. Vyprávím příběh, který jsem zažil/a a ve kterém jsem se musel/a rozhodovat mezi dobrem a zlem. Vysvětlím, proč si myslím, že jsem se zachoval/a správně.',
+				'Různé pohledy. Vyberu si jednu situaci z běžného života (např. ukončení zápasu ve vybíjené, rozhodování, kam půjdeme na výlet). Zeptám se čtyř účastníků, co o té situaci říkají, a to si zapíšu, natočím nebo nahraji. Vymyslím společně s vedoucím či rodičem, proč se názory na danou situaci liší.',
+				'Vyhledávání informací. K tématu, které mě zajímá (např. květiny, rukodělky, historie místa), najdu potřebné informace ve dvou různých zdrojích a porovnám je. Šestce představím téma a řeknu, kde jsem informace k němu našel/našla.',
+				'Přemýšlení. Položím si otázku, nebo mi ji položí vedoucí (např. čím bych chtěl/a být, kdy jsem někomu pomohl/a). Půjdu se na chvíli projít (např. do okolí tábora), nebo si sednu na klidné místo a budu o ní přemýšlet. Na závěr si s vedoucí/m o svých myšlenkách popovídám.',
+			] ],
+			[ 'Vodák', [
+				'Lodička. Vyrobím lodičku z kůry či ze dřeva. Pustím ji po vodě a sleduji, kam dopluje.',
+				'Pádlování. Pádluju správně na obě strany, udržím rytmus posádky. Předvedu záběry kontra, jak přitáhnout a jak odlomit při běžné plavbě na řece.',
+				'Bezpečnost. Pomocí příběhu nebo obrázku ukážu šestce nebezpečí na vodě: peřeje, jezy, válce, stromy nad vodou, nízké lávky a rozlehlé vodní plochy. U každého popíšu, co dělat, abych se do tohoto nebezpečí nedostal/a.',
+				'Plavba na lodi. Na lodi vždy jezdím s vestou, kterou si správně zapnu. Správně nastoupím do lodi a vystoupím z lodi. Ujedu na lodi celkem alespoň 20 kilometrů na tekoucí vodě.',
+				'Úvaz. Bezpečně uvážu loď ke kůlu i okolo stromu lodní smyčkou nebo jiným úvazem.',
+				'Lodní pytel. Zabalím si správně do lodního pytle vybavení na vodáckou výpravu.',
+				'Převržení lodi. Předvedu, jak se chovat při převržení lodi – nepouštím pádlo a pomáhám se záchranou a vylitím lodi. Vyzkouším si to i v tekoucí vodě.',
+				'Plachetnice. Zúčastním se ustrojení a odstrojení plachetnice (oplachtěné pramice).',
+				'Trojúhelník. Objedu na plachetnici trojúhelník jak na hlavní plachtě, tak na kormidle.',
+				'Lodní deník. Nakreslím plánek splutého úseku řeky nebo výpravy na plachetnici včetně zajímavostí, nebo napíšu záznam z plavby včetně zážitků.',
+			] ],
+			[ 'Deskovkář', [
+				'Společenská hra. Spolu s kamarádem nebo kamarádkou si zahrajeme deskovou nebo karetní hru.',
+				'Hodně her. Hrál/a jsem deset různých společenských her.',
+				'Hry s tužkou a papírem. Zahraju si se šestkou tři hry, ke kterým je třeba pouze papír a tužka.',
+				'Vysvětlení pravidel. Vysvětlím srozumitelně šestce nebo rodině pravidla deskové hry, kterou předtím neznali.',
+				'Vlastní pomůcky. Vyrobím si vlastní figurku nebo hrací kostku.',
+				'Starost o hru. Ukážu šestce, jak se k deskovkám chovat, aby se neničily, a jak správně uložit dílky do krabice. Pravidla úklidu dodržuju při každém hraní.',
+				'Turnaj. Uspořádám v šestce turnaj v oblíbené deskovce.',
+				'Fair play. Vysvětlím šestce, proč je důležité u her nepodvádět a umět i prohrávat. Při hraní se nehádám ani nevztekám, aby si hru užili i ostatní.',
+				'Tradiční hry. Zahraju si jednu hru na šachové hrací desce a jednu hru s kartami (např. prší, kvarteto, černý petr).',
+				'Vlastní hra. Vytvořím sám/sama nebo se šestkou vlastní hru (namalujeme plán a vymyslíme pravidla). Hru si zahrajeme.',
+			] ],
+		];
+
+		$obrazky = [
+			'Ajťák'              => 'ajtak.png',
+			'Atlet'              => 'atlet.png',
+			'Cestovatel'         => 'cestovatel.png',
+			'Chovatel'           => 'chovatel.jpg',
+			'Cyklista'           => 'cyklista.jpg',
+			'Čtenář'             => 'ctenar.png',
+			'Deskovkář'          => 'deskovkar.png',
+			'Divadelník'         => 'divadelnik.png',
+			'Fotograf'           => 'fotograf.png',
+			'Historik'           => 'historik.png',
+			'Hudebník'           => 'hudebnik.png',
+			'Hvězdář'            => 'hvezdar.jpg',
+			'Jazykář'            => 'jazykar.png',
+			'Kuchař'             => 'kuchar.png',
+			'Kutil'              => 'kutil.png',
+			'Plavec'             => 'plavec.png',
+			'Polárník'           => 'polarnik.png',
+			'Poutník za pravdou' => 'poutnik.png',
+			'Přírodověděc'       => 'prirodovedet.png',
+			'Průvodce'           => 'pruvodce.png',
+			'Reportér'           => 'reporter.png',
+			'Rukodělkář'         => 'rukodelkar.png',
+			'Sběratel'           => 'sberatel.png',
+			'Sportovec'          => 'sportovec.jpg',
+			'Táborník'           => 'tabornik.png',
+			'Vodák'              => 'vodak.png',
+			'Výtvarník'          => 'vytvarnik.png',
+			'Zahradník'          => 'zahradnik.png',
+			'Zdravotník'         => 'zdravotnik.jpg',
+			'Zpěvák'             => 'zpevak.png',
+		];
+
+		foreach ( $odborky as $row ) {
+			[ $nazev, $ukoly ] = $row;
+			$wpdb->insert( "{$wpdb->prefix}vo_odborky", [
+				'nazev'    => $nazev,
+				'typ'      => 'oba',
+				'min_ukolu'=> 8,
+				'obrazek'  => $obrazky[ $nazev ] ?? null,
+			] );
+			$oid = $wpdb->insert_id;
+			foreach ( $ukoly as $i => $u ) {
+				$wpdb->insert( "{$wpdb->prefix}vo_ukoly", [
+					'odborka_id' => $oid,
+					'poradi'     => $i + 1,
+					'nazev'      => $u,
+				] );
+			}
+		}
 	}
 
 	// ── ACCESS CONTROL ───────────────────────────────────────────────────────
@@ -165,6 +587,10 @@ class VlcciOdborky {
 			'splneno' => $done >= $min,
 			'ukoly'   => $ukoly,
 		];
+	}
+
+	private function img_url( string $soubor ): string {
+		return plugins_url( 'images/' . $soubor, __FILE__ );
 	}
 
 	private function sestka_label( string $typ ): string {
@@ -448,7 +874,7 @@ class VlcciOdborky {
 			}
 
 			$odborky = $wpdb->get_results( $wpdb->prepare(
-				"SELECT * FROM {$wpdb->prefix}vo_odborky WHERE typ=%s ORDER BY nazev", $s->typ
+				"SELECT * FROM {$wpdb->prefix}vo_odborky WHERE (typ='oba' OR typ=%s) ORDER BY nazev", $s->typ
 			) ) ?: [];
 
 			echo '<table class="vo-table widefat">';
@@ -756,7 +1182,7 @@ class VlcciOdborky {
 
 		// Odborky for this child's troop type
 		$typ     = $sestka->typ ?? 'vlcata';
-		$odborky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE typ=%s ORDER BY nazev", $typ ) ) ?: [];
+		$odborky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE (typ='oba' OR typ=%s) ORDER BY nazev", $typ ) ) ?: [];
 
 		if ( empty( $odborky ) ) {
 			echo '<p><em>Pro tento typ oddílu nejsou definovány žádné odborky.</em></p></div>';
@@ -851,7 +1277,7 @@ class VlcciOdborky {
 		) ?: [];
 
 		foreach ( $deti as $d ) {
-			$odborky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE typ=%s ORDER BY nazev", $d->typ ) ) ?: [];
+			$odborky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE (typ='oba' OR typ=%s) ORDER BY nazev", $d->typ ) ) ?: [];
 			$active  = array_filter( $odborky, fn( $o ) => $this->progress( (int) $d->id, (int) $o->id )['done'] > 0 );
 			if ( empty( $active ) && ! $filter_sestka ) continue; // skip untouched
 
@@ -1024,7 +1450,7 @@ class VlcciOdborky {
 				"SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 ORDER BY prijmeni, jmeno", $s->id
 			) ) ?: [];
 			$odborky = $wpdb->get_results( $wpdb->prepare(
-				"SELECT * FROM {$wpdb->prefix}vo_odborky WHERE typ=%s ORDER BY nazev", $s->typ
+				"SELECT * FROM {$wpdb->prefix}vo_odborky WHERE (typ='oba' OR typ=%s) ORDER BY nazev", $s->typ
 			) ) ?: [];
 
 			if ( empty( $deti ) ) { echo '<p><em>Žádné aktivní děti.</em></p></div>'; continue; }
