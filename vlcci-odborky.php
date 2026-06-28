@@ -2267,7 +2267,7 @@ class VlcciOdborky {
 .voa-empty{color:#888;font-style:italic;margin:12px 0;font-size:13px}
 /* Children grid */
 .voa-children-grid{display:flex;flex-wrap:wrap;gap:8px;padding:4px 0}
-.voa-child-card{background:#fff;border:1px solid #ddd;border-radius:4px;padding:12px 14px;min-width:130px;flex:1;text-decoration:none;color:#333;transition:border-color .15s,box-shadow .15s;display:block}
+.voa-child-card{background:#fff;border:1px solid #ddd;border-radius:4px;padding:12px 14px;min-width:130px;max-width:180px;flex:0 1 160px;text-decoration:none;color:#333;transition:border-color .15s,box-shadow .15s;display:block}
 .voa-child-card:hover{border-color:#1a5c2a;box-shadow:0 2px 6px rgba(0,0,0,.07)}
 .voa-child-nickname{font-weight:700;font-size:14px;color:#1a5c2a}
 .voa-child-name{font-size:12px;color:#666;margin:2px 0 6px}
