@@ -17,8 +17,7 @@ class VlcciOdborky {
 		add_action( 'admin_init',        [ $this, 'handle_post' ] );
 		add_action( 'wp_head',           [ $this, 'inject_css' ] );
 		add_action( 'admin_head',        [ $this, 'inject_css' ] );
-		add_action( 'rest_api_init',     [ $this, 'register_webhook' ] );
-		add_shortcode( 'vlcci_prehled',  [ $this, 'shortcode_prehled' ] );
+		add_shortcode( 'vlcci_prehled', [ $this, 'shortcode_prehled' ] );
 	}
 
 	// ── ACTIVATION / DB ──────────────────────────────────────────────────────
@@ -622,7 +621,6 @@ class VlcciOdborky {
 		add_submenu_page( 'vlcci', 'Děti', 'Děti', 'publish_posts', 'vlcci_deti', [ $this, 'page_deti' ] );
 		add_submenu_page( 'vlcci', 'Oddíly a šestky', 'Oddíly a šestky', 'manage_options', 'vlcci_oddily', [ $this, 'page_oddily' ] );
 		add_submenu_page( 'vlcci', 'Definice odborek', 'Definice odborek', 'manage_options', 'vlcci_odborky_def', [ $this, 'page_odborky_def' ] );
-		add_submenu_page( 'vlcci', 'Deploy (webhook)', 'Deploy (webhook)', 'manage_options', 'vlcci_deploy', [ $this, 'page_deploy' ] );
 	}
 
 	// ── FORM DISPATCHER ──────────────────────────────────────────────────────
@@ -1432,126 +1430,6 @@ class VlcciOdborky {
 			}
 			echo '</div>';
 		}
-		echo '</div>';
-	}
-
-	// ── DEPLOY WEBHOOK ──────────────────────────────────────────────────────
-
-	public function register_webhook(): void {
-		register_rest_route( 'vlcci/v1', '/deploy', [
-			'methods'             => 'POST',
-			'callback'            => [ $this, 'handle_webhook' ],
-			'permission_callback' => '__return_true',
-		] );
-	}
-
-	public function handle_webhook( WP_REST_Request $req ): WP_REST_Response {
-		$secret = get_option( 'vlcci_deploy_secret', '' );
-		if ( ! $secret ) {
-			return new WP_REST_Response( [ 'error' => 'Webhook secret není nastaven.' ], 403 );
-		}
-
-		$sig_header = $req->get_header( 'x-hub-signature-256' );
-		if ( ! $sig_header ) {
-			return new WP_REST_Response( [ 'error' => 'Chybí X-Hub-Signature-256.' ], 401 );
-		}
-
-		$body     = $req->get_body();
-		$expected = 'sha256=' . hash_hmac( 'sha256', $body, $secret );
-		if ( ! hash_equals( $expected, $sig_header ) ) {
-			$this->deploy_log( 'Neplatný podpis — zamítnuto.' );
-			return new WP_REST_Response( [ 'error' => 'Neplatný podpis.' ], 401 );
-		}
-
-		$plugin_dir = plugin_dir_path( __FILE__ );
-		$branch     = get_option( 'vlcci_deploy_branch', 'main' );
-		$cmd        = 'cd ' . escapeshellarg( rtrim( $plugin_dir, '/' ) )
-		              . ' && git fetch origin 2>&1'
-		              . ' && git reset --hard ' . escapeshellarg( 'origin/' . $branch ) . ' 2>&1';
-
-		$output = [];
-		exec( $cmd, $output, $code );
-
-		$log = implode( "\n", $output );
-		$this->deploy_log( $log, $code );
-
-		if ( $code !== 0 ) {
-			return new WP_REST_Response( [ 'error' => 'git selhal', 'output' => $log ], 500 );
-		}
-		return new WP_REST_Response( [ 'ok' => true, 'output' => $log ], 200 );
-	}
-
-	private function deploy_log( string $msg, int $code = 0 ): void {
-		$log = get_option( 'vlcci_deploy_log', [] );
-		array_unshift( $log, [
-			'time' => current_time( 'mysql' ),
-			'code' => $code,
-			'msg'  => $msg,
-		] );
-		update_option( 'vlcci_deploy_log', array_slice( $log, 0, 20 ) );
-	}
-
-	public function page_deploy(): void {
-		if ( ! $this->is_admin() ) wp_die( 'Přístup odepřen.' );
-
-		// Save settings
-		if ( isset( $_POST['vlcci_deploy_save'] ) && check_admin_referer( 'vlcci_deploy' ) ) {
-			update_option( 'vlcci_deploy_secret', sanitize_text_field( $_POST['deploy_secret'] ?? '' ) );
-			update_option( 'vlcci_deploy_branch', sanitize_text_field( $_POST['deploy_branch'] ?? 'main' ) );
-			echo '<div class="notice notice-success"><p>Nastavení uloženo.</p></div>';
-		}
-
-		$secret     = get_option( 'vlcci_deploy_secret', '' );
-		$branch     = get_option( 'vlcci_deploy_branch', 'main' );
-		$webhook_url = rest_url( 'vlcci/v1/deploy' );
-		$log        = get_option( 'vlcci_deploy_log', [] );
-
-		echo '<div class="wrap vo-wrap"><h1>Deploy — GitHub Webhook</h1>';
-
-		echo '<div class="vo-card" style="margin-bottom:20px">';
-		echo '<h2>Nastavení</h2>';
-		echo '<form method="post">';
-		wp_nonce_field( 'vlcci_deploy' );
-		echo '<table class="form-table">';
-		echo '<tr><th>Webhook URL</th><td><code>' . esc_html( $webhook_url ) . '</code> &nbsp; <button type="button" class="button" onclick="navigator.clipboard.writeText(\'' . esc_js( $webhook_url ) . '\')">Kopírovat</button></td></tr>';
-		echo '<tr><th><label for="deploy_secret">Secret</label></th><td>';
-		echo '<input type="text" id="deploy_secret" name="deploy_secret" value="' . esc_attr( $secret ) . '" class="regular-text" placeholder="Náhodný tajný řetězec">';
-		echo '<p class="description">Stejný řetězec zadej v GitHubu v nastavení webhooku pod „Secret".</p></td></tr>';
-		echo '<tr><th><label for="deploy_branch">Větev</label></th><td>';
-		echo '<input type="text" id="deploy_branch" name="deploy_branch" value="' . esc_attr( $branch ) . '" style="width:160px">';
-		echo '<p class="description">Větev, ze které se bude provádět <code>git reset --hard</code>.</p></td></tr>';
-		echo '</table>';
-		echo '<p><button type="submit" name="vlcci_deploy_save" value="1" class="button button-primary">Uložit</button></p>';
-		echo '</form></div>';
-
-		echo '<div class="vo-card">';
-		echo '<h2>Nastavení GitHubu</h2>';
-		echo '<ol>';
-		echo '<li>Jdi do repozitáře → <strong>Settings → Webhooks → Add webhook</strong></li>';
-		echo '<li><strong>Payload URL:</strong> <code>' . esc_html( $webhook_url ) . '</code></li>';
-		echo '<li><strong>Content type:</strong> <code>application/json</code></li>';
-		echo '<li><strong>Secret:</strong> vyplň stejný řetězec jako výše</li>';
-		echo '<li><strong>Which events:</strong> Just the push event</li>';
-		echo '<li>Klikni <em>Add webhook</em></li>';
-		echo '</ol>';
-		echo '<p class="description">Po každém push do větve <strong>' . esc_html( $branch ) . '</strong> WordPress automaticky stáhne aktuální soubory pluginu pomocí <code>git fetch &amp;&amp; git reset --hard</code>.</p>';
-		echo '</div>';
-
-		if ( ! empty( $log ) ) {
-			echo '<div class="vo-card" style="margin-top:20px">';
-			echo '<h2>Log posledních deployů</h2>';
-			echo '<table class="vo-table widefat"><thead><tr><th>Čas</th><th>Výsledek</th><th>Výstup</th></tr></thead><tbody>';
-			foreach ( $log as $entry ) {
-				$ok = $entry['code'] === 0;
-				echo '<tr>';
-				echo '<td style="white-space:nowrap">' . esc_html( $entry['time'] ) . '</td>';
-				echo '<td>' . ( $ok ? '<span class="vo-badge vo-badge-ok">OK</span>' : '<span class="vo-badge" style="background:#fee2e2;color:#991b1b">CHYBA (' . (int) $entry['code'] . ')</span>' ) . '</td>';
-				echo '<td><pre style="margin:0;font-size:12px;white-space:pre-wrap">' . esc_html( $entry['msg'] ) . '</pre></td>';
-				echo '</tr>';
-			}
-			echo '</tbody></table></div>';
-		}
-
 		echo '</div>';
 	}
 
