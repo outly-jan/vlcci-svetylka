@@ -1067,10 +1067,11 @@ class VlcciOdborky {
 
 		echo '<div class="wrap vo-wrap"><h1>Definice odborek</h1>' . $this->render_flash();
 
-		echo '<table class="vo-table widefat" style="margin-bottom:16px"><thead><tr><th>Typ</th><th>Název</th><th>Min. úkolů</th><th>Úkolů</th><th></th></tr></thead><tbody>';
+		echo '<table class="vo-table widefat" style="margin-bottom:16px"><thead><tr><th></th><th>Typ</th><th>Název</th><th>Min. úkolů</th><th>Úkolů</th><th></th></tr></thead><tbody>';
 		foreach ( $odborky as $o ) {
 			$cnt = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_ukoly WHERE odborka_id=%d", $o->id ) );
 			echo '<tr>';
+			echo '<td style="width:40px">' . ( $o->obrazek ? '<img src="' . esc_url( $this->img_url( $o->obrazek ) ) . '" style="width:32px;height:32px;object-fit:contain">' : '' ) . '</td>';
 			echo '<td>' . esc_html( $this->typ_label( $o->typ ) ) . '</td>';
 			echo '<td><a href="' . esc_url( $this->admin_url( 'vlcci_odborky_def', [ 'edit_odborka' => $o->id ] ) ) . '">' . esc_html( $o->nazev ) . '</a></td>';
 			echo '<td>' . (int) $o->min_ukolu . '</td>';
@@ -1195,7 +1196,9 @@ class VlcciOdborky {
 			$p    = $this->progress( $dite_id, (int) $o->id );
 			$cls  = 'vo-tab' . ( (int) $o->id === $odborka_id ? ' vo-tab-active' : '' ) . ( $p['splneno'] ? ' vo-tab-done' : ( $p['done'] > 0 ? ' vo-tab-partial' : '' ) );
 			$url  = $this->admin_url( 'vlcci_plneni', [ 'dite_id' => $dite_id, 'sestka_id' => $sestka_id, 'odborka_id' => $o->id ] );
-			echo '<a href="' . esc_url( $url ) . '" class="' . $cls . '">' . esc_html( $o->nazev );
+			echo '<a href="' . esc_url( $url ) . '" class="' . $cls . '">';
+			if ( $o->obrazek ) echo '<img src="' . esc_url( $this->img_url( $o->obrazek ) ) . '" style="width:20px;height:20px;object-fit:contain;vertical-align:middle;margin-right:4px">';
+			echo esc_html( $o->nazev );
 			if ( $p['done'] > 0 ) echo ' <small>(' . $p['done'] . '/' . $p['total'] . ')</small>';
 			echo '</a> ';
 		}
@@ -1210,7 +1213,9 @@ class VlcciOdborky {
 		$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
 
 		echo '<div class="vo-card">';
-		echo '<h2>' . esc_html( $dite->prezdivka ) . ' — ' . esc_html( $odborka->nazev ) . '</h2>';
+		echo '<h2>';
+		if ( $odborka->obrazek ) echo '<img src="' . esc_url( $this->img_url( $odborka->obrazek ) ) . '" style="width:40px;height:40px;object-fit:contain;vertical-align:middle;margin-right:10px">';
+		echo esc_html( $dite->prezdivka ) . ' — ' . esc_html( $odborka->nazev ) . '</h2>';
 		echo '<div class="vo-progress-wrap"><div class="vo-progress vo-progress-lg"><div class="vo-progress-bar" style="width:' . $pct . '%"></div></div>';
 		echo '<span class="vo-progress-label">' . $p['done'] . ' / ' . $p['total'] . ' úkolů';
 		if ( $p['splneno'] ) echo ' &nbsp;<span class="vo-badge vo-badge-ok">✓ SPLNĚNO</span>';
@@ -1326,7 +1331,9 @@ class VlcciOdborky {
 			) ) ?: [];
 
 			echo '<div class="vo-card" style="margin-bottom:16px">';
-			echo '<h2>' . esc_html( $o->nazev ) . ' <small>(' . esc_html( $this->typ_label( $o->typ ) ) . ')</small></h2>';
+			echo '<h2>';
+			if ( $o->obrazek ) echo '<img src="' . esc_url( $this->img_url( $o->obrazek ) ) . '" style="width:40px;height:40px;object-fit:contain;vertical-align:middle;margin-right:10px">';
+			echo esc_html( $o->nazev ) . ' <small>(' . esc_html( $this->typ_label( $o->typ ) ) . ')</small></h2>';
 			if ( empty( $deti ) ) { echo '<p><em>Nikdo tuto odborku neplní.</em></p></div>'; continue; }
 
 			// Sort by progress desc
@@ -1464,7 +1471,9 @@ class VlcciOdborky {
 					if ( $p['done'] === 0 ) continue;
 					$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
 					echo '<div class="vo-sc-odborka">';
-					echo '<div class="vo-sc-odborka-name">' . esc_html( $o->nazev );
+					echo '<div class="vo-sc-odborka-name">';
+					if ( $o->obrazek ) echo '<img src="' . esc_url( $this->img_url( $o->obrazek ) ) . '" style="width:24px;height:24px;object-fit:contain;vertical-align:middle;margin-right:5px">';
+					echo esc_html( $o->nazev );
 					if ( $p['splneno'] ) echo ' <span class="vo-badge vo-badge-ok">✓</span>';
 					echo '</div>';
 					echo '<div class="vo-progress"><div class="vo-progress-bar" style="width:' . $pct . '%"></div></div>';
