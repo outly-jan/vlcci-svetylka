@@ -2205,7 +2205,7 @@ class VlcciOdborky {
 .vo-sc-date { color: #888; }
 
 /* ── Frontend App ── */
-.voa-wrap{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;color:#333;max-width:1000px;margin:0}
+.voa-wrap{font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;font-size:14px;color:#333;max-width:1000px;margin:0}
 .voa-menu{display:flex;flex-wrap:wrap;gap:4px;border-bottom:3px solid #1a5c2a}
 .voa-menu a{font-size:12px;padding:7px 13px;background:#f0f0f0;color:#444;border:1px solid #ccc;border-bottom:none;border-radius:4px 4px 0 0;white-space:nowrap;text-decoration:none;transition:background .15s;margin-bottom:-1px;display:inline-block}
 .voa-menu a:hover{background:#e0e0e0;color:#333}
