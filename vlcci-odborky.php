@@ -729,6 +729,11 @@ class VlcciOdborky {
 		$id        = intval( $_POST['dite_id'] ?? 0 );
 		$sestka_id = intval( $_POST['sestka_id'] ?? 0 );
 		if ( ! $this->can_edit_sestka( $sestka_id ) ) wp_die( 'Přístup odepřen.' );
+		// Při přesunu ověř oprávnění i k původní šestce
+		if ( $id ) {
+			$orig = $wpdb->get_var( $wpdb->prepare( "SELECT sestka_id FROM {$wpdb->prefix}vo_deti WHERE id=%d", $id ) );
+			if ( $orig && ! $this->can_edit_sestka( (int) $orig ) ) wp_die( 'Přístup odepřen.' );
+		}
 		$jmeno     = sanitize_text_field( $_POST['jmeno'] ?? '' );
 		$prijmeni  = sanitize_text_field( $_POST['prijmeni'] ?? '' );
 		$prezdivka = sanitize_text_field( $_POST['prezdivka'] ?? '' );
@@ -1044,8 +1049,17 @@ class VlcciOdborky {
 			echo '<form method="post" class="vo-form-row">';
 			echo $this->nonce_field( 'vo_deti' );
 			echo '<input type="hidden" name="vo_action" value="save_dite">';
-			echo '<input type="hidden" name="sestka_id" value="' . $sestka_id . '">';
-			if ( $edit_d ) echo '<input type="hidden" name="dite_id" value="' . $edit_d->id . '">';
+			if ( $edit_d ) {
+				echo '<input type="hidden" name="dite_id" value="' . $edit_d->id . '">';
+				echo '<label>Šestka/roj: <select name="sestka_id">';
+				foreach ( $all_sestky as $s ) {
+					if ( ! $this->can_edit_sestka( (int) $s->id ) ) continue;
+					echo '<option value="' . $s->id . '"' . selected( (int) $edit_d->sestka_id, (int) $s->id, false ) . '>' . esc_html( $s->oddil_nazev . ' — ' . $s->nazev ) . '</option>';
+				}
+				echo '</select></label>';
+			} else {
+				echo '<input type="hidden" name="sestka_id" value="' . $sestka_id . '">';
+			}
 			echo '<input type="text" name="jmeno" value="' . esc_attr( $edit_d->jmeno ?? '' ) . '" placeholder="Jméno" required>';
 			echo '<input type="text" name="prijmeni" value="' . esc_attr( $edit_d->prijmeni ?? '' ) . '" placeholder="Příjmení" required>';
 			echo '<input type="text" name="prezdivka" value="' . esc_attr( $edit_d->prezdivka ?? '' ) . '" placeholder="Přezdívka" required>';
