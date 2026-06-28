@@ -11,4 +11,4 @@ jobs:
     steps:
       - name: Zavolat deploy webhook
         run: |
-          curl -fsS "https://skautchlumec.cz/wp-content/plugins/vlcci-svetylka/deploy-webhook.php?token=${{ secrets.DEPLOY_TOKEN }}"
+          curl -fsS "https://skautchlumec.cz/wp-content/plugins/vlcci-svetylka/deploy-webhook.php?token=${{ secrets.DEPLOY_SECRET }}"
