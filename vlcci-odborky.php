@@ -1628,10 +1628,10 @@ class VlcciOdborky {
 
 	public function shortcode_app( array $atts ): string {
 		if ( ! is_user_logged_in() ) {
-			return '<div class="voa-wrap"><div class="voa-login-box"><p>Pro přístup k aplikaci se přihlaste.</p><a href="' . esc_url( wp_login_url( get_permalink() ) ) . '" class="voa-btn voa-btn-primary">Přihlásit se</a></div></div>';
+			return '<div class="voa-wrap"><div class="voa-menu"><span style="padding:8px 12px;font-size:13px;color:#555">Odborky</span></div><div class="voa-login-box"><p>Pro přístup k aplikaci se přihlaste.</p><a href="' . esc_url( wp_login_url( get_permalink() ) ) . '" class="voa-btn voa-btn-primary">Přihlásit se</a></div></div>';
 		}
 		if ( ! current_user_can( 'publish_posts' ) ) {
-			return '<div class="voa-wrap"><div class="voa-alert voa-alert-error">Nemáte oprávnění k přístupu.</div></div>';
+			return '<div class="voa-wrap"><div class="voa-menu"></div><div class="voa-content"><div class="voa-alert voa-alert-error">Nemáte oprávnění k přístupu.</div></div></div>';
 		}
 		$page = sanitize_key( $_GET['vo'] ?? 'dashboard' );
 		ob_start();
@@ -1655,23 +1655,23 @@ class VlcciOdborky {
 
 	private function app_nav( string $active ): string {
 		$items = [
-			'dashboard'   => '🏠 Přehled',
-			'plneni'      => '✏️ Plnění',
-			'po_detech'   => '👤 Po dětech',
-			'po_odborkach'=> '🏅 Po odborkách',
-			'deti'        => '👶 Správa dětí',
+			'dashboard'    => '🏠 Přehled',
+			'plneni'       => '✏️ Plnění',
+			'po_detech'    => '👤 Po dětech',
+			'po_odborkach' => '🏅 Po odborkách',
+			'deti'         => '👶 Správa dětí',
 		];
 		if ( $this->is_admin() ) {
-			$items['oddily'] = '🏕 Oddíly';
+			$items['oddily'] = '🏕️ Oddíly';
 			$items['filtr']  = '🔍 Filtr';
 		}
-		$html  = '<nav class="voa-nav"><div class="voa-nav-inner">';
-		$html .= '<span class="voa-nav-brand">Odborky</span><ul class="voa-nav-links">';
+		$html = '<nav class="voa-menu">';
 		foreach ( $items as $key => $label ) {
-			$cls   = $key === $active ? ' class="active"' : '';
-			$html .= '<li><a href="' . esc_url( $this->app_url( $key ) ) . '"' . $cls . '>' . esc_html( $label ) . '</a></li>';
+			$cls   = $key === $active ? ' voa-active' : '';
+			$html .= '<a href="' . esc_url( $this->app_url( $key ) ) . '" class="' . $cls . '">' . $label . '</a>';
 		}
-		$html .= '</ul><span class="voa-nav-user">' . esc_html( wp_get_current_user()->display_name ) . '</span></div></nav>';
+		$html .= '<span class="voa-menu-user">👤 ' . esc_html( wp_get_current_user()->display_name ) . '</span>';
+		$html .= '</nav>';
 		return $html;
 	}
 
@@ -1688,10 +1688,10 @@ class VlcciOdborky {
 		foreach ( $sestky as $s ) {
 			$label    = ucfirst( $this->sestka_label( $s->typ ) );
 			$can_edit = $this->can_edit_sestka( (int) $s->id );
-			echo '<div class="voa-card" style="margin-bottom:20px">';
-			echo '<div class="voa-card-head voa-card-head--' . esc_attr( $s->typ ) . '">';
-			echo '<h2>' . esc_html( $s->oddil_nazev . ' — ' . $label . ' ' . $s->nazev ) . '</h2>';
-			if ( $can_edit ) echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-btn voa-btn-sm voa-btn-white">Zapsat plnění</a>';
+			echo '<div class="voa-card">';
+			echo '<div class="voa-card-head">';
+			echo '<h2 class="voa-card-title" style="margin-bottom:0;border-bottom:none">' . esc_html( $s->oddil_nazev . ' — ' . $label . ' ' . $s->nazev ) . '</h2>';
+			if ( $can_edit ) echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-btn voa-btn-sm voa-btn-white">✏️ Zapsat plnění</a>';
 			echo '</div>';
 			$deti    = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 ORDER BY prijmeni, jmeno", $s->id ) ) ?: [];
 			$odborky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE (typ='oba' OR typ=%s) ORDER BY nazev", $s->typ ) ) ?: [];
@@ -1719,7 +1719,7 @@ class VlcciOdborky {
 			$my_ids  = array_map( fn($s) => (int)$s->id, $sestky );
 			$others  = array_filter( $all, fn($s) => ! in_array( (int)$s->id, $my_ids ) );
 			if ( ! empty( $others ) ) {
-				echo '<h2 class="voa-section-title">Ostatní šestky a roje</h2><div class="voa-sestky-list">';
+				echo '<h3 class="voa-section-title">Ostatní šestky a roje</h3><div class="voa-sestky-list">';
 				foreach ( $others as $s ) {
 					$cnt = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1", $s->id ) );
 					echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-sestka-item"><strong>' . esc_html( $s->oddil_nazev . ' — ' . ucfirst( $this->sestka_label( $s->typ ) ) . ' ' . $s->nazev ) . '</strong><span class="voa-muted">' . $cnt . ' dětí</span></a>';
@@ -1942,7 +1942,7 @@ class VlcciOdborky {
 		echo '</div>';
 
 		$deti = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d ORDER BY prijmeni, jmeno", $sestka_id ) ) ?: [];
-		echo '<div class="voa-card" style="margin-bottom:20px"><table class="voa-table"><thead><tr><th>Příjmení</th><th>Jméno</th><th>Přezdívka</th><th>Aktivní</th><th></th></tr></thead><tbody>';
+		echo '<div class="voa-card"><div style="overflow-x:auto"><table class="voa-table"><thead><tr><th>Příjmení</th><th>Jméno</th><th>Přezdívka</th><th>Aktivní</th><th></th></tr></thead><tbody>';
 		foreach ( $deti as $d ) {
 			echo '<tr' . ( $d->aktivni ? '' : ' style="opacity:.55"' ) . '><td>' . esc_html( $d->prijmeni ) . '</td><td>' . esc_html( $d->jmeno ) . '</td><td><strong>' . esc_html( $d->prezdivka ) . '</strong></td><td>' . ( $d->aktivni ? '<span class="voa-green">✓</span>' : '–' ) . '</td>';
 			echo '<td class="voa-table-actions"><a href="' . esc_url( $this->app_url( 'dite', [ 'dite_id' => $d->id ] ) ) . '" class="voa-link">Detail</a>';
@@ -1952,11 +1952,11 @@ class VlcciOdborky {
 			}
 			echo '</td></tr>';
 		}
-		echo '</tbody></table></div>';
+		echo '</tbody></table></div></div>';
 
 		if ( $can_edit ) {
 			$edit_sestky = $this->is_admin() ? $all_sestky : array_filter( $all_sestky, fn($s) => $this->can_edit_sestka( (int)$s->id ) );
-			echo '<div class="voa-card"><h3 style="margin:0 0 16px">' . ( $edit_d ? 'Upravit: ' . esc_html( $edit_d->prezdivka ) : 'Přidat dítě' ) . '</h3>';
+			echo '<div class="voa-card"><h3 class="voa-card-title">' . ( $edit_d ? '✏️ Upravit: ' . esc_html( $edit_d->prezdivka ) : '➕ Přidat dítě' ) . '</h3>';
 			echo '<form method="post" class="voa-form-grid">';
 			echo $this->app_nonce( 'save_dite' ) . $this->app_base_field();
 			echo '<input type="hidden" name="_vo_app_action" value="save_dite">';
@@ -1994,25 +1994,25 @@ class VlcciOdborky {
 		foreach ( $oddily as $o ) echo '<a href="' . esc_url( $this->app_url( 'oddily', [ 'oddil_id' => $o->id ] ) ) . '" class="voa-tab' . ( (int)$o->id === $oddil_id ? ' voa-tab--active' : '' ) . '">' . esc_html( $o->nazev ) . '</a>';
 		echo '</div>';
 
-		echo '<div class="voa-card" style="margin-bottom:20px"><h3 style="padding:16px 20px;margin:0;border-bottom:1px solid #F0E8DC">' . ( $eo ? 'Upravit oddíl' : 'Přidat oddíl' ) . '</h3><div style="padding:16px 20px">';
+		echo '<div class="voa-card"><h3 class="voa-card-title">' . ( $eo ? '✏️ Upravit oddíl' : '➕ Přidat oddíl' ) . '</h3>';
 		echo '<form method="post" class="voa-form-row">';
 		echo $this->app_nonce( 'save_oddil' ) . $this->app_base_field();
 		echo '<input type="hidden" name="_vo_app_action" value="save_oddil">';
 		if ( $eo ) echo '<input type="hidden" name="oddil_id" value="' . $eo->id . '">';
 		echo '<input type="text" name="nazev" value="' . esc_attr( $eo->nazev ?? '' ) . '" class="voa-input" placeholder="Název oddílu" required>';
 		echo '<select name="typ" class="voa-input"><option value="vlcata"' . selected( $eo->typ ?? '', 'vlcata', false ) . '>Vlčata</option><option value="svetlusky"' . selected( $eo->typ ?? '', 'svetlusky', false ) . '>Světlušky</option></select>';
-		echo '<button type="submit" class="voa-btn voa-btn-primary">Uložit oddíl</button>';
+		echo '<button type="submit" class="voa-btn voa-btn-primary">💾 Uložit oddíl</button>';
 		if ( $eo ) echo ' <a href="' . esc_url( $this->app_url( 'oddily', [ 'oddil_id' => $oddil_id ] ) ) . '" class="voa-btn voa-btn-secondary">Zrušit</a>';
-		echo '</form></div></div>';
+		echo '</form></div>';
 
 		if ( ! $oddil_id ) return;
 		$oddil  = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_oddily WHERE id=%d", $oddil_id ) );
 		$sestky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_sestky WHERE oddil_id=%d ORDER BY nazev", $oddil_id ) ) ?: [];
 
-		echo '<div class="voa-card" style="margin-bottom:20px">';
-		echo '<div class="voa-card-head"><h3 style="margin:0">Šestky / roje — ' . esc_html( $oddil->nazev ) . '</h3>';
+		echo '<div class="voa-card">';
+		echo '<div class="voa-card-head"><h3 class="voa-card-title" style="margin-bottom:0;border-bottom:none">🏕️ Šestky / roje — ' . esc_html( $oddil->nazev ) . '</h3>';
 		echo '<span class="voa-muted">' . $this->typ_label( $oddil->typ ) . '</span></div>';
-		echo '<div style="padding:8px 20px">';
+		echo '<div style="padding:4px 0">';
 		foreach ( $sestky as $s ) {
 			$vedouci_ids = array_column( $wpdb->get_results( $wpdb->prepare( "SELECT user_id FROM {$wpdb->prefix}vo_vedouci WHERE sestka_id=%d", $s->id ) ) ?: [], 'user_id' );
 			$cnt         = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1", $s->id ) );
@@ -2053,17 +2053,17 @@ class VlcciOdborky {
 		$odborka_id = intval( $_GET['odborka_id'] ?? 0 );
 		$ukol_id    = intval( $_GET['ukol_id'] ?? 0 );
 		$odborky    = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_odborky ORDER BY typ, nazev" ) ?: [];
-		echo '<h1 class="voa-page-title">Filtr</h1><p class="voa-muted" style="margin-bottom:16px">Děti, které plní odborku, ale chybí jim konkrétní úkol.</p>';
-		echo '<div class="voa-form-row" style="margin-bottom:20px"><label style="font-size:14px;font-weight:600">Odborka <select class="voa-input" onchange="location.href=\'' . esc_js( $this->app_url( 'filtr' ) ) . '&odborka_id=\'+this.value"><option value="">— vyber —</option>';
+		echo '<h1 class="voa-page-title">🔍 Filtr</h1><p class="voa-muted" style="margin-bottom:16px">Děti, které plní odborku, ale chybí jim konkrétní úkol.</p>';
+		echo '<div class="voa-card"><div class="voa-form-row" style="margin-bottom:0"><div class="voa-form-group" style="margin-bottom:0"><label>Odborka</label><select class="voa-input" style="width:auto;min-width:180px" onchange="location.href=\'' . esc_js( $this->app_url( 'filtr' ) ) . '&odborka_id=\'+this.value"><option value="">— vyber —</option>';
 		foreach ( $odborky as $o ) echo '<option value="' . $o->id . '"' . selected( $odborka_id, (int)$o->id, false ) . '>' . esc_html( $o->nazev ) . '</option>';
 		echo '</select></label>';
 		if ( $odborka_id ) {
 			$ukoly = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_ukoly WHERE odborka_id=%d ORDER BY poradi", $odborka_id ) ) ?: [];
-			echo '<label style="font-size:14px;font-weight:600">Chybějící úkol <select class="voa-input" onchange="location.href=\'' . esc_js( $this->app_url( 'filtr', [ 'odborka_id' => $odborka_id ] ) ) . '&ukol_id=\'+this.value"><option value="">— vyber —</option>';
+			echo '<div class="voa-form-group" style="margin-bottom:0"><label>Chybějící úkol</label><select class="voa-input" style="width:auto;min-width:220px" onchange="location.href=\'' . esc_js( $this->app_url( 'filtr', [ 'odborka_id' => $odborka_id ] ) ) . '&ukol_id=\'+this.value"><option value="">— vyber —</option>';
 			foreach ( $ukoly as $u ) echo '<option value="' . $u->id . '"' . selected( $ukol_id, (int)$u->id, false ) . '>' . (int)$u->poradi . '. ' . esc_html( $u->nazev ) . '</option>';
-			echo '</select></label>';
+			echo '</select></div>';
 		}
-		echo '</div>';
+		echo '</div></div>';
 		if ( $odborka_id && $ukol_id ) {
 			$vysledky = $wpdb->get_results( $wpdb->prepare(
 				"SELECT DISTINCT d.*, s.nazev AS sestka_nazev, s.id AS sestka_id, o.nazev AS oddil_nazev
@@ -2075,21 +2075,22 @@ class VlcciOdborky {
 			) ) ?: [];
 			$ukol_obj = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_ukoly WHERE id=%d", $ukol_id ) );
 			$odb_obj  = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE id=%d", $odborka_id ) );
-			echo '<div class="voa-card"><div class="voa-card-head"><h3 style="margin:0">' . esc_html( $odb_obj->nazev ) . '</h3><span class="voa-muted">chybí: ' . esc_html( $ukol_obj->nazev ) . '</span></div><div style="padding:12px 20px">';
+			echo '<div class="voa-card" style="margin-top:16px">';
+			echo '<div class="voa-card-head"><h3 class="voa-card-title" style="margin-bottom:0;border-bottom:none">' . esc_html( $odb_obj->nazev ) . '</h3><span class="voa-muted">chybí: ' . esc_html( $ukol_obj->nazev ) . '</span></div>';
 			if ( empty( $vysledky ) ) {
-				echo '<div class="voa-alert voa-alert-success">Všichni mají tento úkol splněný. 🎉</div>';
+				echo '<div class="voa-alert voa-alert-success">✅ Všichni mají tento úkol splněný.</div>';
 			} else {
-				echo '<table class="voa-table"><thead><tr><th>Přezdívka</th><th>Příjmení, Jméno</th><th>Oddíl / Šestka</th><th>Postup</th><th></th></tr></thead><tbody>';
+				echo '<div style="overflow-x:auto"><table class="voa-table"><thead><tr><th>Přezdívka</th><th>Příjmení, Jméno</th><th>Oddíl / Šestka</th><th>Postup</th><th></th></tr></thead><tbody>';
 				foreach ( $vysledky as $d ) {
 					$pr  = $this->progress( (int)$d->id, $odborka_id );
 					$pct = $pr['total'] ? round( $pr['done'] / $pr['total'] * 100 ) : 0;
 					echo '<tr><td><strong>' . esc_html( $d->prezdivka ) . '</strong></td><td>' . esc_html( $d->prijmeni . ' ' . $d->jmeno ) . '</td><td>' . esc_html( $d->oddil_nazev . ' / ' . $d->sestka_nazev ) . '</td>';
-					echo '<td><div class="voa-progress-bar-wrap voa-progress-bar-wrap--md"><div class="voa-progress-bar-fill voa-progress-bar-fill--orange" style="width:' . $pct . '%"></div></div> ' . $pr['done'] . '/' . $pr['total'] . '</td>';
-					echo '<td><a href="' . esc_url( $this->app_url( 'plneni', [ 'dite_id' => $d->id, 'odborka_id' => $odborka_id ] ) ) . '" class="voa-link">Plnění</a></td></tr>';
+					echo '<td style="min-width:120px"><div class="voa-progress-bar-wrap voa-progress-bar-wrap--md"><div class="voa-progress-bar-fill voa-progress-bar-fill--orange" style="width:' . $pct . '%"></div></div><span class="voa-progress-text">' . $pr['done'] . '/' . $pr['total'] . '</span></td>';
+					echo '<td><a href="' . esc_url( $this->app_url( 'plneni', [ 'dite_id' => $d->id, 'odborka_id' => $odborka_id ] ) ) . '" class="voa-link">✏️ Plnění</a></td></tr>';
 				}
-				echo '</tbody></table>';
+				echo '</tbody></table></div>';
 			}
-			echo '</div></div>';
+			echo '</div>';
 		}
 	}
 
@@ -2203,122 +2204,141 @@ class VlcciOdborky {
 .vo-sc-task { margin: 2px 0; }
 .vo-sc-date { color: #888; }
 
-/* ── Frontend App (voa-*) ── */
-:root {
-  --voa-navy:   #20649B;
-  --voa-orange: #ECA038;
-  --voa-green:  #008836;
-  --voa-coral:  #EA614A;
-  --voa-cream:  #FDF6EC;
-  --voa-brown:  #A38456;
-  --voa-purple: #A87A93;
-  --voa-blue:   #6B96CA;
-  --voa-border: #E8D8C0;
-}
-.voa-wrap { font-family: inherit; background: var(--voa-cream); min-height: 60vh; border-radius: 10px; overflow: hidden; border: 1px solid var(--voa-border); }
-/* Nav */
-.voa-nav { background: var(--voa-navy); padding: 0 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.voa-nav a { display: inline-block; padding: 12px 16px; color: rgba(255,255,255,.8); text-decoration: none; font-size: 14px; border-bottom: 3px solid transparent; transition: color .2s, border-color .2s; }
-.voa-nav a:hover { color: #fff; }
-.voa-nav a.voa-nav-active { color: #fff; border-bottom-color: var(--voa-orange); font-weight: 600; }
-.voa-nav-spacer { flex: 1; }
-.voa-nav-user { color: rgba(255,255,255,.65); font-size: 13px; padding: 12px 0; }
-/* Content */
-.voa-content { padding: 24px 20px; }
+/* ── Frontend App ── */
+.voa-wrap{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;color:#333;max-width:1000px;margin:0}
+.voa-menu{display:flex;flex-wrap:wrap;gap:4px;border-bottom:3px solid #1a5c2a}
+.voa-menu a{font-size:12px;padding:7px 13px;background:#f0f0f0;color:#444;border:1px solid #ccc;border-bottom:none;border-radius:4px 4px 0 0;white-space:nowrap;text-decoration:none;transition:background .15s;margin-bottom:-1px;display:inline-block}
+.voa-menu a:hover{background:#e0e0e0;color:#333}
+.voa-menu a.voa-active{background:#1a5c2a;color:#fff!important;border-color:#1a5c2a;font-weight:600}
+.voa-menu-user{font-size:12px;color:#555;padding:7px 4px 7px 12px;margin-left:auto;align-self:flex-end}
+.voa-content{padding:20px;background:#fff;border:1px solid #1a5c2a;border-top:none}
+.voa-login-box{padding:60px 20px;text-align:center;background:#fff;border:1px solid #1a5c2a;border-top:none}
+.voa-login-box p{margin-bottom:16px;font-size:15px;color:#555}
 /* Alerts */
-.voa-alert { padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; font-size: 14px; }
-.voa-alert-success { background: #e6f4ec; color: #1a5c30; border-left: 4px solid var(--voa-green); }
-.voa-alert-error   { background: #fdecea; color: #8c1d0f; border-left: 4px solid var(--voa-coral); }
+.voa-alert{padding:10px 14px;border-radius:3px;margin-bottom:16px;font-size:13px;border-left:4px solid}
+.voa-alert-success{background:#f0faf0;border-color:#2e7d32;color:#1b5e20}
+.voa-alert-error{background:#fff0f0;border-color:#d63638;color:#7b1c1e}
 /* Buttons */
-.voa-btn { display: inline-block; padding: 8px 18px; border-radius: 6px; font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer; border: none; transition: filter .15s; }
-.voa-btn:hover { filter: brightness(.92); }
-.voa-btn-primary { background: var(--voa-orange); color: #fff; }
-.voa-btn-secondary { background: var(--voa-navy); color: #fff; }
-.voa-btn-success { background: var(--voa-green); color: #fff; }
-.voa-btn-danger { background: var(--voa-coral); color: #fff; font-size: 13px; padding: 5px 12px; }
-.voa-btn-sm { padding: 4px 12px; font-size: 13px; }
-.voa-btn-link { background: none; border: none; cursor: pointer; padding: 0; font-size: inherit; color: var(--voa-navy); text-decoration: underline; }
-/* Login box */
-.voa-login-box { padding: 60px 20px; text-align: center; }
-.voa-login-box p { margin-bottom: 16px; font-size: 16px; color: #555; }
-/* Cards / sections */
-.voa-section-title { font-size: 1.3em; font-weight: 700; color: var(--voa-navy); margin: 0 0 16px; }
-.voa-card-grid { display: flex; flex-wrap: wrap; gap: 16px; }
-.voa-card { background: #fff; border: 1px solid var(--voa-border); border-radius: 8px; padding: 16px 18px; flex: 1; min-width: 200px; }
-.voa-card h3 { margin: 0 0 10px; font-size: 1em; color: var(--voa-navy); }
-/* Badge / status chips */
-.voa-chip { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-.voa-chip-ok   { background: #d4edda; color: #155724; }
-.voa-chip-warn { background: #fff3cd; color: #856404; }
-.voa-chip-no   { background: #f8d7da; color: #721c24; }
-/* Dashboard stats */
-.voa-stats { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
-.voa-stat-card { background: #fff; border: 1px solid var(--voa-border); border-radius: 8px; padding: 20px 24px; text-align: center; flex: 1; min-width: 120px; }
-.voa-stat-number { font-size: 2.2em; font-weight: 700; color: var(--voa-orange); line-height: 1; }
-.voa-stat-label  { font-size: 13px; color: #777; margin-top: 4px; }
-/* Children grid */
-.voa-deti-grid { display: flex; flex-wrap: wrap; gap: 14px; }
-.voa-dite-card { background: #fff; border: 1px solid var(--voa-border); border-radius: 8px; padding: 14px 16px; min-width: 160px; flex: 1; }
-.voa-dite-card h4 { margin: 0 0 4px; font-size: .95em; color: var(--voa-navy); }
-.voa-dite-card .voa-dite-meta { font-size: 12px; color: #888; margin-bottom: 8px; }
-.voa-dite-card .voa-dite-progress { font-size: 13px; }
-/* Badge grid */
-.voa-odborky-grid { display: flex; flex-wrap: wrap; gap: 14px; }
-.voa-odborka-card { background: #fff; border: 1px solid var(--voa-border); border-radius: 8px; padding: 14px 16px; width: 160px; text-align: center; position: relative; }
-.voa-odborka-card.voa-splnena { border-color: var(--voa-green); background: #f0fdf4; }
-.voa-odborka-card img { width: 64px; height: 64px; object-fit: contain; margin-bottom: 8px; }
-.voa-odborka-card h4 { margin: 0 0 6px; font-size: .85em; color: #333; }
-.voa-odborka-badge-done { position: absolute; top: 8px; right: 8px; font-size: 18px; }
-/* Progress bar */
-.voa-progress { background: #e8d8c0; border-radius: 99px; height: 8px; overflow: hidden; margin: 4px 0; }
-.voa-progress-bar { height: 100%; background: var(--voa-green); border-radius: 99px; transition: width .3s; }
-.voa-progress-bar.voa-progress-partial { background: var(--voa-orange); }
-.voa-progress-label { font-size: 12px; color: #666; }
-/* Plnění task list */
-.voa-plneni-wrap { background: #fff; border: 1px solid var(--voa-border); border-radius: 8px; overflow: hidden; }
-.voa-plneni-wrap table { width: 100%; border-collapse: collapse; }
-.voa-plneni-wrap th { background: var(--voa-navy); color: #fff; padding: 10px 12px; text-align: left; font-size: 13px; }
-.voa-plneni-wrap td { padding: 8px 12px; border-bottom: 1px solid #f0e8dc; font-size: 13px; vertical-align: middle; }
-.voa-plneni-wrap tr:last-child td { border-bottom: none; }
-.voa-plneni-wrap tr.voa-row-done td { background: #f0fdf4; }
-.voa-plneni-wrap input[type=date], .voa-plneni-wrap input[type=text] { width: 100%; padding: 4px 8px; border: 1px solid #d0bfa0; border-radius: 4px; font-size: 13px; background: #fffdf8; }
-.voa-plneni-wrap input[type=date]:focus, .voa-plneni-wrap input[type=text]:focus { outline: none; border-color: var(--voa-orange); box-shadow: 0 0 0 2px rgba(236,160,56,.25); }
+.voa-btn{display:inline-block;padding:6px 14px;font-size:13px;font-weight:500;border:none;border-radius:3px;cursor:pointer;text-decoration:none;line-height:1.6;transition:filter .15s;vertical-align:middle}
+.voa-btn:hover{filter:brightness(.88)}
+.voa-btn-primary{background:#1a5c2a;color:#fff!important}
+.voa-btn-danger{background:#d63638;color:#fff!important}
+.voa-btn-secondary{background:#757575;color:#fff!important}
+.voa-btn-white{background:#fff;color:#1a5c2a!important;border:1px solid #1a5c2a}
+.voa-btn-sm{padding:3px 9px;font-size:12px}
+/* Cards */
+.voa-card{background:#fafafa;border:1px solid #ddd;border-radius:4px;padding:18px 20px;margin-bottom:20px}
+.voa-card-title{margin:0 0 14px;padding-bottom:8px;border-bottom:2px solid #1a5c2a;color:#1a5c2a;font-size:15px;font-weight:600}
+.voa-card-head{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.voa-card-head h2,.voa-card-head h3{margin:0;flex:1}
+.voa-section-title{margin:16px 0 12px;font-size:16px;color:#222;font-weight:600}
+.voa-page-header{margin-bottom:20px}
+.voa-page-title{font-size:18px;color:#222;font-weight:600;margin:0 0 4px}
+/* Tabs (URL-based) */
+.voa-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:16px;border-bottom:2px solid #ddd;padding-bottom:0}
+.voa-tab{display:inline-block;font-size:12px;padding:6px 12px;background:#f5f5f5;color:#444;border:1px solid #ccc;border-bottom:none;border-radius:3px 3px 0 0;text-decoration:none;transition:background .15s;margin-bottom:-2px}
+.voa-tab:hover{background:#e5e5e5;color:#222}
+.voa-tab--active{background:#1a5c2a;color:#fff!important;border-color:#1a5c2a;font-weight:600}
 /* Tables */
-.voa-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; border: 1px solid var(--voa-border); }
-.voa-table th { background: var(--voa-navy); color: #fff; padding: 10px 14px; text-align: left; font-size: 13px; }
-.voa-table td { padding: 9px 14px; border-bottom: 1px solid #f0e8dc; font-size: 14px; vertical-align: middle; }
-.voa-table tr:last-child td { border-bottom: none; }
-.voa-table tbody tr:hover td { background: #fffaf3; }
-.voa-table tr.voa-inactive td { opacity: .55; }
+.voa-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}
+.voa-table th{background:#e8f2ea;color:#222;border:1px solid #b8d4be;padding:7px 10px;text-align:left;font-weight:600}
+.voa-table td{border:1px solid #e0e0e0;padding:7px 10px;vertical-align:middle}
+.voa-table tbody tr:hover td{background:#f5faf5}
+.voa-table tr.voa-inactive td{opacity:.55}
+.voa-table-actions{white-space:nowrap}
 /* Forms */
-.voa-form { background: #fff; border: 1px solid var(--voa-border); border-radius: 8px; padding: 20px 22px; max-width: 520px; }
-.voa-form-title { font-size: 1.05em; font-weight: 700; color: var(--voa-navy); margin: 0 0 16px; }
-.voa-form-group { margin-bottom: 14px; }
-.voa-form-group label { display: block; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 4px; }
-.voa-form-group input[type=text], .voa-form-group input[type=date], .voa-form-group select, .voa-form-group textarea { width: 100%; padding: 8px 10px; border: 1px solid #d0bfa0; border-radius: 5px; font-size: 14px; background: #fffdf8; box-sizing: border-box; }
-.voa-form-group input:focus, .voa-form-group select:focus, .voa-form-group textarea:focus { outline: none; border-color: var(--voa-orange); box-shadow: 0 0 0 2px rgba(236,160,56,.25); }
-.voa-form-actions { display: flex; gap: 10px; align-items: center; margin-top: 18px; }
-.voa-inline-form { display: inline; }
-/* Tabs */
-.voa-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
-.voa-tab { display: inline-block; padding: 7px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; text-decoration: none; border: 2px solid var(--voa-border); color: var(--voa-brown); background: #fff; transition: all .15s; }
-.voa-tab:hover { border-color: var(--voa-orange); color: var(--voa-orange); }
-.voa-tab-active { background: var(--voa-orange); border-color: var(--voa-orange); color: #fff; }
-.voa-tab-done { border-color: var(--voa-green); color: var(--voa-green); }
-.voa-tab-done.voa-tab-active { background: var(--voa-green); color: #fff; }
-/* Filtr */
-.voa-filtr-result { margin-top: 20px; }
-/* Misc */
-.voa-mb { margin-bottom: 20px; }
-.voa-mt { margin-top: 20px; }
-.voa-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.voa-back-link { display: inline-block; margin-bottom: 16px; font-size: 13px; color: var(--voa-navy); text-decoration: none; }
-.voa-back-link:hover { text-decoration: underline; }
-@media (max-width: 600px) {
-  .voa-nav a { padding: 10px 10px; font-size: 13px; }
-  .voa-content { padding: 16px 12px; }
-  .voa-stat-card { min-width: 100px; }
-  .voa-odborka-card { width: 130px; }
+.voa-form-group{margin-bottom:14px}
+.voa-form-group>label,.voa-form-group label{display:block;font-weight:600;margin-bottom:4px;font-size:13px;color:#444}
+.voa-form-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.voa-form-actions{margin-top:16px;display:flex;gap:8px;align-items:center}
+.voa-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;align-items:end}
+.voa-input{width:100%;padding:6px 9px;border:1px solid #ccc;border-radius:3px;font-size:13px;box-sizing:border-box}
+.voa-input:focus{outline:none;border-color:#1a5c2a;box-shadow:0 0 0 2px rgba(26,92,42,.15)}
+.voa-checkboxes{display:flex;flex-wrap:wrap;gap:6px 16px;margin:6px 0}
+.voa-checkbox{display:flex;gap:5px;align-items:center;font-size:13px;font-weight:normal!important;cursor:pointer}
+/* Links & misc */
+.voa-link{color:#1a5c2a;text-decoration:none;font-size:13px}
+.voa-link:hover{text-decoration:underline}
+.voa-link-danger{color:#d63638}
+.voa-back{display:inline-block;color:#555;text-decoration:none;font-size:13px;margin-bottom:12px}
+.voa-back:hover{color:#222;text-decoration:underline}
+.voa-muted{color:#666;font-size:13px}
+.voa-green{color:#1a5c2a;font-weight:600}
+.voa-empty{color:#888;font-style:italic;margin:12px 0;font-size:13px}
+/* Children grid */
+.voa-children-grid{display:flex;flex-wrap:wrap;gap:8px;padding:4px 0}
+.voa-child-card{background:#fff;border:1px solid #ddd;border-radius:4px;padding:12px 14px;min-width:130px;flex:1;text-decoration:none;color:#333;transition:border-color .15s,box-shadow .15s;display:block}
+.voa-child-card:hover{border-color:#1a5c2a;box-shadow:0 2px 6px rgba(0,0,0,.07)}
+.voa-child-nickname{font-weight:700;font-size:14px;color:#1a5c2a}
+.voa-child-name{font-size:12px;color:#666;margin:2px 0 6px}
+.voa-child-stats{display:flex;gap:5px;flex-wrap:wrap}
+.voa-badge-count{display:inline-block;border-radius:3px;padding:1px 7px;font-size:11px;font-weight:600}
+.voa-badge-count--green{background:#d1e7dd;color:#0a5b2e;border:1px solid #a3cfbb}
+.voa-badge-count--orange{background:#fff3cd;color:#856404;border:1px solid #ffc107}
+/* Badge grid */
+.voa-odborky-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.voa-odborka-card{background:#fff;border:1px solid #ddd;border-radius:4px;padding:12px 8px;width:140px;text-align:center;text-decoration:none;color:#333;transition:border-color .15s;display:block}
+.voa-odborka-card:hover{border-color:#1a5c2a}
+.voa-odborka-card--done{border-color:#1a5c2a;background:#f0faf0}
+.voa-odborka-card--partial{border-color:#f59e0b}
+.voa-odborka-img{width:52px;height:52px;object-fit:contain;display:block;margin:0 auto 6px}
+.voa-odborka-name{font-size:12px;font-weight:600;color:#333;line-height:1.3}
+.voa-splneno-badge{display:inline-block;margin-top:4px;padding:2px 8px;background:#d1e7dd;color:#0a5b2e;border-radius:3px;font-size:11px;font-weight:700}
+.voa-odborka-empty{font-size:11px;color:#999;margin-top:4px}
+/* Progress */
+.voa-progress-bar-wrap{background:#e0e0e0;border-radius:2px;height:6px;overflow:hidden;margin:4px 0}
+.voa-progress-bar-wrap--md{height:8px;flex:1}
+.voa-progress-bar-wrap--lg{height:10px;width:100%;max-width:280px}
+.voa-progress-bar-fill{height:100%;border-radius:2px;transition:width .3s}
+.voa-progress-bar-fill--green{background:#1a5c2a}
+.voa-progress-bar-fill--orange{background:#f59e0b}
+.voa-progress-text{font-size:12px;color:#555}
+.voa-progress-big{display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap}
+/* Plnění */
+.voa-plneni-header{display:flex;gap:14px;align-items:flex-start;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #e0e0e0;flex-wrap:wrap}
+.voa-plneni-img{width:60px;height:60px;object-fit:contain;flex-shrink:0}
+.voa-plneni-info{flex:1;min-width:180px}
+.voa-ukoly-list{border:1px solid #ddd;border-radius:4px;overflow:hidden;margin-bottom:16px}
+.voa-ukol{display:flex;border-bottom:1px solid #eee}
+.voa-ukol:last-child{border-bottom:none}
+.voa-ukol--done{background:#f0faf0}
+.voa-ukol-num{width:34px;min-width:34px;background:#f5f5f5;display:flex;align-items:flex-start;justify-content:center;padding:10px 0;font-size:12px;color:#888;font-weight:600;border-right:1px solid #eee}
+.voa-ukol--done .voa-ukol-num{background:#d1e7dd;color:#1a5c2a}
+.voa-ukol-body{flex:1;padding:10px 12px}
+.voa-ukol-nazev{font-size:13px;color:#333;margin-bottom:6px}
+.voa-ukol-inputs{display:flex;gap:10px;flex-wrap:wrap}
+.voa-ukol-inputs label{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:600;color:#555;flex:1;min-width:120px}
+.voa-input-date,.voa-input-note{padding:4px 7px;border:1px solid #ccc;border-radius:3px;font-size:12px}
+.voa-input-date:focus,.voa-input-note:focus{outline:none;border-color:#1a5c2a}
+.voa-ukol-datum{font-size:12px;color:#555;margin-top:4px}
+/* Dashboard rows */
+.voa-sestky-list{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.voa-sestka-item{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f8faf8;border:1px solid #ddd;border-radius:4px;text-decoration:none;color:#333;transition:border-color .15s}
+.voa-sestka-item:hover{border-color:#1a5c2a}
+.voa-sestka-row{padding:10px 0;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.voa-sestka-row:last-child{border-bottom:none}
+.voa-sestka-info{flex:1}
+.voa-sestka-actions{display:flex;gap:10px;align-items:center;flex-shrink:0}
+.voa-sestka-edit-form{background:#f0faf0;border:1px solid #b8d4be;border-radius:4px;padding:14px;margin:8px 0 4px}
+/* Po dětech */
+.voa-odborky-row{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0 4px}
+.voa-odborka-mini{display:flex;flex-direction:column;align-items:center;text-align:center;width:86px;padding:7px 5px;background:#fff;border:1px solid #ddd;border-radius:4px;text-decoration:none;color:#333;font-size:11px;transition:border-color .15s;gap:3px}
+.voa-odborka-mini:hover{border-color:#1a5c2a}
+.voa-odborka-mini--done{border-color:#1a5c2a;background:#f0faf0}
+.voa-dite-link{text-decoration:none;color:#1a5c2a;font-weight:600}
+/* Po odborkách */
+.voa-children-progress{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.voa-progress-row{display:flex;align-items:center;gap:10px;padding:5px 0;text-decoration:none;color:#333;border-bottom:1px solid #f0f0f0}
+.voa-progress-row:last-child{border-bottom:none}
+.voa-progress-row:hover{background:#f8faf8}
+.voa-progress-name{width:130px;font-size:13px;flex-shrink:0}
+@media(max-width:640px){
+  .voa-menu{flex-direction:column;border-bottom:none;gap:2px}
+  .voa-menu a{border-radius:3px;border-bottom:1px solid #ccc;margin-bottom:0}
+  .voa-menu-user{margin-left:0;padding:4px 0}
+  .voa-content{padding:14px 12px}
+  .voa-odborka-card{width:120px}
+  .voa-progress-name{width:90px}
 }
 </style>';
 	}
