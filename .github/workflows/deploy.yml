@@ -1,0 +1,14 @@
+name: Deploy na server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Zavolat deploy webhook
+        run: |
+          curl -fsS "https://skautchlumec.cz/wp-content/plugins/vlcci-svetylka/deploy-webhook.php?token=${{ secrets.DEPLOY_TOKEN }}"
