@@ -18,6 +18,8 @@ class VlcciOdborky {
 		add_action( 'wp_head',           [ $this, 'inject_css' ] );
 		add_action( 'admin_head',        [ $this, 'inject_css' ] );
 		add_shortcode( 'vlcci_prehled', [ $this, 'shortcode_prehled' ] );
+		add_action( 'template_redirect',  [ $this, 'handle_app_post' ] );
+		add_shortcode( 'vlcci_app',       [ $this, 'shortcode_app' ] );
 	}
 
 	// ── ACTIVATION / DB ──────────────────────────────────────────────────────
@@ -1447,6 +1449,650 @@ class VlcciOdborky {
 		echo '</div>';
 	}
 
+	// ── FRONTEND APP ─────────────────────────────────────────────────────────
+
+	private function app_url( string $page = 'dashboard', array $extra = [] ): string {
+		global $post;
+		$base  = get_permalink( $post ) ?: home_url( '/' );
+		$clean = remove_query_arg( [ 'vo', 'dite_id', 'odborka_id', 'sestka_id', 'oddil_id', 'edit_id', 'edit_o', 'edit_s' ], $base );
+		return add_query_arg( array_merge( [ 'vo' => $page ], $extra ), $clean );
+	}
+
+	private function app_set_flash( string $msg, string $type = 'success' ): void {
+		set_transient( 'vo_app_flash_' . get_current_user_id(), compact( 'msg', 'type' ), 60 );
+	}
+
+	private function app_render_flash(): string {
+		$uid = get_current_user_id();
+		$t   = get_transient( 'vo_app_flash_' . $uid );
+		delete_transient( 'vo_app_flash_' . $uid );
+		if ( ! $t ) return '';
+		$cls = $t['type'] === 'error' ? 'voa-alert-error' : 'voa-alert-success';
+		return '<div class="voa-alert ' . $cls . '">' . esc_html( $t['msg'] ) . '</div>';
+	}
+
+	private function app_redirect( string $base_url, string $page, array $extra = [] ): void {
+		$clean = remove_query_arg( [ 'vo', 'dite_id', 'odborka_id', 'sestka_id', 'oddil_id', 'edit_id', 'edit_o', 'edit_s' ], $base_url );
+		wp_safe_redirect( add_query_arg( array_merge( [ 'vo' => $page ], $extra ), $clean ) );
+		exit;
+	}
+
+	private function app_nonce( string $action ): string {
+		return wp_nonce_field( 'vo_app_' . $action, '_wpnonce', true, false );
+	}
+
+	private function app_base_field(): string {
+		$base = wp_get_referer() ?: home_url( '/' );
+		$clean = remove_query_arg( [ 'vo', 'dite_id', 'odborka_id', 'sestka_id', 'oddil_id', 'edit_id', 'edit_o', 'edit_s' ], $base );
+		return '<input type="hidden" name="_vo_app_base" value="' . esc_attr( $clean ) . '">';
+	}
+
+	public function handle_app_post(): void {
+		if ( empty( $_POST['_vo_app_action'] ) ) return;
+		if ( ! is_user_logged_in() ) return;
+		$action = sanitize_key( $_POST['_vo_app_action'] );
+		if ( ! wp_verify_nonce( $_POST['_wpnonce'] ?? '', 'vo_app_' . $action ) ) wp_die( 'Neplatný bezpečnostní token.' );
+		$base = esc_url_raw( wp_unslash( $_POST['_vo_app_base'] ?? '' ) ) ?: home_url( '/' );
+		switch ( $action ) {
+			case 'save_plneni':   $this->app_do_save_plneni( $base );   break;
+			case 'save_dite':     $this->app_do_save_dite( $base );     break;
+			case 'delete_dite':   $this->app_do_delete_dite( $base );   break;
+			case 'save_oddil':    $this->app_do_save_oddil( $base );    break;
+			case 'delete_oddil':  $this->app_do_delete_oddil( $base );  break;
+			case 'save_sestka':   $this->app_do_save_sestka( $base );   break;
+			case 'delete_sestka': $this->app_do_delete_sestka( $base ); break;
+			case 'save_vedouci':  $this->app_do_save_vedouci( $base );  break;
+		}
+	}
+
+	private function app_do_save_plneni( string $base ): void {
+		global $wpdb;
+		$dite_id    = intval( $_POST['dite_id'] ?? 0 );
+		$odborka_id = intval( $_POST['odborka_id'] ?? 0 );
+		$d = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE id=%d", $dite_id ) );
+		if ( ! $d || ! $this->can_edit_sestka( (int) $d->sestka_id ) ) wp_die( 'Přístup odepřen.' );
+		$ukoly      = $wpdb->get_results( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}vo_ukoly WHERE odborka_id=%d", $odborka_id ) ) ?: [];
+		$vedouci_id = get_current_user_id();
+		foreach ( $ukoly as $u ) {
+			$datum = sanitize_text_field( $_POST[ 'datum_' . $u->id ] ?? '' );
+			$pozn  = sanitize_textarea_field( $_POST[ 'pozn_' . $u->id ] ?? '' );
+			if ( $datum ) {
+				$wpdb->query( $wpdb->prepare(
+					"INSERT INTO {$wpdb->prefix}vo_plneni (dite_id,ukol_id,datum_splneni,poznamka,vedouci_id) VALUES (%d,%d,%s,%s,%d)
+					 ON DUPLICATE KEY UPDATE datum_splneni=%s,poznamka=%s,vedouci_id=%d",
+					$dite_id, $u->id, $datum, $pozn, $vedouci_id, $datum, $pozn, $vedouci_id
+				) );
+			} else {
+				$wpdb->delete( "{$wpdb->prefix}vo_plneni", [ 'dite_id' => $dite_id, 'ukol_id' => $u->id ] );
+			}
+		}
+		$this->app_set_flash( 'Plnění uloženo.' );
+		$this->app_redirect( $base, 'plneni', [ 'dite_id' => $dite_id, 'odborka_id' => $odborka_id ] );
+	}
+
+	private function app_do_save_dite( string $base ): void {
+		global $wpdb;
+		$id        = intval( $_POST['dite_id'] ?? 0 );
+		$sestka_id = intval( $_POST['sestka_id'] ?? 0 );
+		if ( ! $this->can_edit_sestka( $sestka_id ) ) wp_die( 'Přístup odepřen.' );
+		if ( $id ) {
+			$orig = (int) $wpdb->get_var( $wpdb->prepare( "SELECT sestka_id FROM {$wpdb->prefix}vo_deti WHERE id=%d", $id ) );
+			if ( $orig && ! $this->can_edit_sestka( $orig ) ) wp_die( 'Přístup odepřen.' );
+		}
+		$jmeno     = sanitize_text_field( $_POST['jmeno'] ?? '' );
+		$prijmeni  = sanitize_text_field( $_POST['prijmeni'] ?? '' );
+		$prezdivka = sanitize_text_field( $_POST['prezdivka'] ?? '' );
+		$aktivni   = isset( $_POST['aktivni'] ) ? 1 : 0;
+		if ( ! $jmeno || ! $prijmeni || ! $prezdivka ) {
+			$this->app_set_flash( 'Vyplňte jméno, příjmení i přezdívku.', 'error' );
+			$this->app_redirect( $base, 'deti', $id ? [ 'edit_id' => $id ] : [] );
+		}
+		$data = compact( 'sestka_id', 'jmeno', 'prijmeni', 'prezdivka', 'aktivni' );
+		if ( $id ) {
+			$wpdb->update( "{$wpdb->prefix}vo_deti", $data, [ 'id' => $id ] );
+		} else {
+			$wpdb->insert( "{$wpdb->prefix}vo_deti", $data );
+		}
+		$this->app_set_flash( 'Dítě uloženo.' );
+		$this->app_redirect( $base, 'deti', [ 'sestka_id' => $sestka_id ] );
+	}
+
+	private function app_do_delete_dite( string $base ): void {
+		global $wpdb;
+		$id = intval( $_POST['dite_id'] ?? 0 );
+		$d  = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE id=%d", $id ) );
+		if ( ! $d || ! $this->can_edit_sestka( (int) $d->sestka_id ) ) wp_die( 'Přístup odepřen.' );
+		$wpdb->delete( "{$wpdb->prefix}vo_deti", [ 'id' => $id ] );
+		$this->app_set_flash( 'Dítě smazáno.' );
+		$this->app_redirect( $base, 'deti', [ 'sestka_id' => $d->sestka_id ] );
+	}
+
+	private function app_do_save_oddil( string $base ): void {
+		if ( ! $this->is_admin() ) wp_die( 'Přístup odepřen.' );
+		global $wpdb;
+		$id    = intval( $_POST['oddil_id'] ?? 0 );
+		$nazev = sanitize_text_field( $_POST['nazev'] ?? '' );
+		$typ   = in_array( $_POST['typ'] ?? '', [ 'vlcata', 'svetlusky' ] ) ? $_POST['typ'] : 'vlcata';
+		if ( ! $nazev ) { $this->app_set_flash( 'Vyplňte název.', 'error' ); $this->app_redirect( $base, 'oddily' ); }
+		if ( $id ) { $wpdb->update( "{$wpdb->prefix}vo_oddily", compact( 'nazev', 'typ' ), [ 'id' => $id ] ); }
+		else        { $wpdb->insert( "{$wpdb->prefix}vo_oddily", compact( 'nazev', 'typ' ) ); }
+		$this->app_set_flash( 'Oddíl uložen.' );
+		$this->app_redirect( $base, 'oddily' );
+	}
+
+	private function app_do_delete_oddil( string $base ): void {
+		if ( ! $this->is_admin() ) wp_die( 'Přístup odepřen.' );
+		global $wpdb;
+		$wpdb->delete( "{$wpdb->prefix}vo_oddily", [ 'id' => intval( $_POST['oddil_id'] ?? 0 ) ] );
+		$this->app_set_flash( 'Oddíl smazán.' );
+		$this->app_redirect( $base, 'oddily' );
+	}
+
+	private function app_do_save_sestka( string $base ): void {
+		if ( ! $this->is_admin() ) wp_die( 'Přístup odepřen.' );
+		global $wpdb;
+		$id       = intval( $_POST['sestka_id'] ?? 0 );
+		$oddil_id = intval( $_POST['oddil_id'] ?? 0 );
+		$nazev    = sanitize_text_field( $_POST['nazev'] ?? '' );
+		if ( ! $nazev ) { $this->app_set_flash( 'Vyplňte název.', 'error' ); $this->app_redirect( $base, 'oddily', [ 'oddil_id' => $oddil_id ] ); }
+		if ( $id ) { $wpdb->update( "{$wpdb->prefix}vo_sestky", compact( 'nazev', 'oddil_id' ), [ 'id' => $id ] ); }
+		else        { $wpdb->insert( "{$wpdb->prefix}vo_sestky", compact( 'nazev', 'oddil_id' ) ); }
+		$this->app_set_flash( 'Šestka/roj uložena.' );
+		$this->app_redirect( $base, 'oddily', [ 'oddil_id' => $oddil_id ] );
+	}
+
+	private function app_do_delete_sestka( string $base ): void {
+		if ( ! $this->is_admin() ) wp_die( 'Přístup odepřen.' );
+		global $wpdb;
+		$id = intval( $_POST['sestka_id'] ?? 0 );
+		$s  = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_sestky WHERE id=%d", $id ) );
+		$wpdb->delete( "{$wpdb->prefix}vo_sestky", [ 'id' => $id ] );
+		$this->app_set_flash( 'Šestka/roj smazána.' );
+		$this->app_redirect( $base, 'oddily', [ 'oddil_id' => $s->oddil_id ?? 0 ] );
+	}
+
+	private function app_do_save_vedouci( string $base ): void {
+		if ( ! $this->is_admin() ) wp_die( 'Přístup odepřen.' );
+		global $wpdb;
+		$sestka_id = intval( $_POST['sestka_id'] ?? 0 );
+		$oddil_id  = intval( $_POST['oddil_id'] ?? 0 );
+		$wpdb->delete( "{$wpdb->prefix}vo_vedouci", [ 'sestka_id' => $sestka_id ] );
+		foreach ( array_filter( array_map( 'intval', (array) ( $_POST['user_ids'] ?? [] ) ) ) as $uid ) {
+			$wpdb->replace( "{$wpdb->prefix}vo_vedouci", [ 'sestka_id' => $sestka_id, 'user_id' => $uid ] );
+		}
+		$this->app_set_flash( 'Vedoucí uloženi.' );
+		$this->app_redirect( $base, 'oddily', [ 'oddil_id' => $oddil_id ] );
+	}
+
+	// ── APP SHORTCODE & ROUTING ───────────────────────────────────────────────
+
+	public function shortcode_app( array $atts ): string {
+		if ( ! is_user_logged_in() ) {
+			return '<div class="voa-wrap"><div class="voa-login-box"><p>Pro přístup k aplikaci se přihlaste.</p><a href="' . esc_url( wp_login_url( get_permalink() ) ) . '" class="voa-btn voa-btn-primary">Přihlásit se</a></div></div>';
+		}
+		if ( ! current_user_can( 'publish_posts' ) ) {
+			return '<div class="voa-wrap"><div class="voa-alert voa-alert-error">Nemáte oprávnění k přístupu.</div></div>';
+		}
+		$page = sanitize_key( $_GET['vo'] ?? 'dashboard' );
+		ob_start();
+		echo '<div class="voa-wrap">';
+		echo $this->app_nav( $page );
+		echo '<div class="voa-content">';
+		echo $this->app_render_flash();
+		switch ( $page ) {
+			case 'plneni':        $this->app_page_plneni();       break;
+			case 'dite':          $this->app_page_dite();          break;
+			case 'po_detech':     $this->app_page_po_detech();     break;
+			case 'po_odborkach':  $this->app_page_po_odborkach();  break;
+			case 'deti':          $this->app_page_deti();          break;
+			case 'oddily':        $this->app_page_oddily();        break;
+			case 'filtr':         $this->app_page_filtr();         break;
+			default:              $this->app_page_dashboard();     break;
+		}
+		echo '</div></div>';
+		return ob_get_clean();
+	}
+
+	private function app_nav( string $active ): string {
+		$items = [
+			'dashboard'   => '🏠 Přehled',
+			'plneni'      => '✏️ Plnění',
+			'po_detech'   => '👤 Po dětech',
+			'po_odborkach'=> '🏅 Po odborkách',
+			'deti'        => '👶 Správa dětí',
+		];
+		if ( $this->is_admin() ) {
+			$items['oddily'] = '🏕 Oddíly';
+			$items['filtr']  = '🔍 Filtr';
+		}
+		$html  = '<nav class="voa-nav"><div class="voa-nav-inner">';
+		$html .= '<span class="voa-nav-brand">Odborky</span><ul class="voa-nav-links">';
+		foreach ( $items as $key => $label ) {
+			$cls   = $key === $active ? ' class="active"' : '';
+			$html .= '<li><a href="' . esc_url( $this->app_url( $key ) ) . '"' . $cls . '>' . esc_html( $label ) . '</a></li>';
+		}
+		$html .= '</ul><span class="voa-nav-user">' . esc_html( wp_get_current_user()->display_name ) . '</span></div></nav>';
+		return $html;
+	}
+
+	// ── APP PAGES ─────────────────────────────────────────────────────────────
+
+	private function app_page_dashboard(): void {
+		global $wpdb;
+		$sestky = $this->my_sestky();
+		echo '<h1 class="voa-page-title">Přehled</h1>';
+		if ( empty( $sestky ) ) {
+			echo '<div class="voa-empty">Nemáte přiřazenu žádnou šestku. Kontaktujte administrátora.</div>';
+			return;
+		}
+		foreach ( $sestky as $s ) {
+			$label    = ucfirst( $this->sestka_label( $s->typ ) );
+			$can_edit = $this->can_edit_sestka( (int) $s->id );
+			echo '<div class="voa-card" style="margin-bottom:20px">';
+			echo '<div class="voa-card-head voa-card-head--' . esc_attr( $s->typ ) . '">';
+			echo '<h2>' . esc_html( $s->oddil_nazev . ' — ' . $label . ' ' . $s->nazev ) . '</h2>';
+			if ( $can_edit ) echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-btn voa-btn-sm voa-btn-white">Zapsat plnění</a>';
+			echo '</div>';
+			$deti    = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 ORDER BY prijmeni, jmeno", $s->id ) ) ?: [];
+			$odborky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE (typ='oba' OR typ=%s) ORDER BY nazev", $s->typ ) ) ?: [];
+			if ( empty( $deti ) ) {
+				echo '<div style="padding:16px 20px"><p class="voa-muted">Žádné aktivní děti.</p></div>';
+			} else {
+				echo '<div class="voa-children-grid">';
+				foreach ( $deti as $d ) {
+					$splneno = 0; $rozp = 0;
+					foreach ( $odborky as $o ) { $p = $this->progress( (int)$d->id, (int)$o->id ); if ( $p['splneno'] ) $splneno++; elseif ( $p['done'] > 0 ) $rozp++; }
+					echo '<a href="' . esc_url( $this->app_url( 'dite', [ 'dite_id' => $d->id ] ) ) . '" class="voa-child-card">';
+					echo '<div class="voa-child-nickname">' . esc_html( $d->prezdivka ) . '</div>';
+					echo '<div class="voa-child-name">' . esc_html( $d->jmeno . ' ' . $d->prijmeni ) . '</div>';
+					echo '<div class="voa-child-stats">';
+					if ( $splneno ) echo '<span class="voa-badge-count voa-badge-count--green">' . $splneno . ' splněno</span>';
+					if ( $rozp )    echo '<span class="voa-badge-count voa-badge-count--orange">' . $rozp . ' rozp.</span>';
+					echo '</div></a>';
+				}
+				echo '</div>';
+			}
+			echo '</div>';
+		}
+		if ( $this->is_admin() ) {
+			$all     = $wpdb->get_results( "SELECT s.*, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_sestky s LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id ORDER BY o.nazev, s.nazev" ) ?: [];
+			$my_ids  = array_map( fn($s) => (int)$s->id, $sestky );
+			$others  = array_filter( $all, fn($s) => ! in_array( (int)$s->id, $my_ids ) );
+			if ( ! empty( $others ) ) {
+				echo '<h2 class="voa-section-title">Ostatní šestky a roje</h2><div class="voa-sestky-list">';
+				foreach ( $others as $s ) {
+					$cnt = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1", $s->id ) );
+					echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-sestka-item"><strong>' . esc_html( $s->oddil_nazev . ' — ' . ucfirst( $this->sestka_label( $s->typ ) ) . ' ' . $s->nazev ) . '</strong><span class="voa-muted">' . $cnt . ' dětí</span></a>';
+				}
+				echo '</div>';
+			}
+		}
+	}
+
+	private function app_page_dite(): void {
+		global $wpdb;
+		$dite_id = intval( $_GET['dite_id'] ?? 0 );
+		if ( ! $dite_id ) { echo '<div class="voa-empty">Vyberte dítě.</div>'; return; }
+		$d = $wpdb->get_row( $wpdb->prepare(
+			"SELECT d.*, s.nazev AS sestka_nazev, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_deti d
+			 LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE d.id=%d", $dite_id
+		) );
+		if ( ! $d ) { echo '<div class="voa-empty">Dítě nenalezeno.</div>'; return; }
+		$can_edit = $this->can_edit_sestka( (int) $d->sestka_id );
+		echo '<div class="voa-page-header"><a href="' . esc_url( $this->app_url( 'dashboard' ) ) . '" class="voa-back">← Přehled</a>';
+		echo '<h1 class="voa-page-title" style="margin:4px 0">' . esc_html( $d->prezdivka ) . '</h1>';
+		echo '<p class="voa-muted">' . esc_html( $d->jmeno . ' ' . $d->prijmeni ) . ' — ' . esc_html( $d->oddil_nazev . ' / ' . $d->sestka_nazev ) . '</p></div>';
+		$odborky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE (typ='oba' OR typ=%s) ORDER BY nazev", $d->typ ) ) ?: [];
+		echo '<div class="voa-odborky-grid">';
+		foreach ( $odborky as $o ) {
+			$p   = $this->progress( $dite_id, (int)$o->id );
+			$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
+			$cls = 'voa-odborka-card' . ( $p['splneno'] ? ' voa-odborka-card--done' : ( $p['done'] > 0 ? ' voa-odborka-card--partial' : '' ) );
+			$url = $can_edit ? $this->app_url( 'plneni', [ 'dite_id' => $dite_id, 'odborka_id' => $o->id ] ) : '#';
+			echo '<a href="' . esc_url( $url ) . '" class="' . $cls . '">';
+			if ( $o->obrazek ) echo '<img src="' . esc_url( $this->img_url( $o->obrazek ) ) . '" class="voa-odborka-img" alt="">';
+			echo '<div class="voa-odborka-name">' . esc_html( $o->nazev ) . '</div>';
+			if ( $p['splneno'] ) echo '<div class="voa-splneno-badge">✓ Splněno</div>';
+			elseif ( $p['done'] > 0 ) echo '<div class="voa-odborka-progress"><div class="voa-progress-bar-wrap"><div class="voa-progress-bar-fill voa-progress-bar-fill--orange" style="width:' . $pct . '%"></div></div><span class="voa-progress-text">' . $p['done'] . '/' . $p['total'] . '</span></div>';
+			else echo '<div class="voa-odborka-empty">Nezahájeno</div>';
+			echo '</a>';
+		}
+		echo '</div>';
+	}
+
+	private function app_page_plneni(): void {
+		global $wpdb;
+		$dite_id    = intval( $_GET['dite_id'] ?? 0 );
+		$odborka_id = intval( $_GET['odborka_id'] ?? 0 );
+		$sestka_id  = intval( $_GET['sestka_id'] ?? 0 );
+		$my_sestky  = $this->my_sestky();
+		$all_sestky = $wpdb->get_results( "SELECT s.*, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_sestky s LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id ORDER BY o.nazev, s.nazev" ) ?: [];
+
+		if ( ! $dite_id ) {
+			if ( ! $sestka_id && ! empty( $my_sestky ) ) $sestka_id = (int)$my_sestky[0]->id;
+			echo '<h1 class="voa-page-title">Plnění — vyber dítě</h1>';
+			echo '<div class="voa-tabs" style="margin-bottom:20px">';
+			foreach ( $all_sestky as $s ) {
+				$cls = (int)$s->id === $sestka_id ? ' voa-tab--active' : '';
+				echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-tab' . $cls . '">' . esc_html( $s->oddil_nazev . ' — ' . $s->nazev ) . '</a>';
+			}
+			echo '</div>';
+			if ( $sestka_id ) {
+				$sestka  = $wpdb->get_row( $wpdb->prepare( "SELECT s.*, o.typ FROM {$wpdb->prefix}vo_sestky s LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE s.id=%d", $sestka_id ) );
+				$deti    = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 ORDER BY prijmeni, jmeno", $sestka_id ) ) ?: [];
+				$odborky = $sestka ? $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE (typ='oba' OR typ=%s) ORDER BY nazev", $sestka->typ ) ) ?: [] : [];
+				echo '<div class="voa-children-grid">';
+				foreach ( $deti as $d ) {
+					$spl = 0; $roz = 0;
+					foreach ( $odborky as $o ) { $p = $this->progress( (int)$d->id, (int)$o->id ); if ( $p['splneno'] ) $spl++; elseif ( $p['done'] > 0 ) $roz++; }
+					echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'dite_id' => $d->id, 'sestka_id' => $sestka_id ] ) ) . '" class="voa-child-card">';
+					echo '<div class="voa-child-nickname">' . esc_html( $d->prezdivka ) . '</div><div class="voa-child-name">' . esc_html( $d->jmeno . ' ' . $d->prijmeni ) . '</div>';
+					echo '<div class="voa-child-stats">';
+					if ( $spl ) echo '<span class="voa-badge-count voa-badge-count--green">' . $spl . ' splněno</span>';
+					if ( $roz ) echo '<span class="voa-badge-count voa-badge-count--orange">' . $roz . ' rozp.</span>';
+					echo '</div></a>';
+				}
+				if ( empty( $deti ) ) echo '<p class="voa-muted">Žádné aktivní děti.</p>';
+				echo '</div>';
+			}
+			return;
+		}
+
+		$d = $wpdb->get_row( $wpdb->prepare(
+			"SELECT d.*, s.nazev AS sestka_nazev, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_deti d
+			 LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE d.id=%d", $dite_id
+		) );
+		if ( ! $d ) { echo '<div class="voa-empty">Dítě nenalezeno.</div>'; return; }
+		$can_edit = $this->can_edit_sestka( (int) $d->sestka_id );
+
+		echo '<div class="voa-page-header"><a href="' . esc_url( $this->app_url( 'plneni', [ 'sestka_id' => $d->sestka_id ] ) ) . '" class="voa-back">← Zpět</a>';
+		echo '<h1 class="voa-page-title" style="margin:4px 0">' . esc_html( $d->prezdivka ) . '</h1>';
+		echo '<p class="voa-muted">' . esc_html( $d->jmeno . ' ' . $d->prijmeni ) . ' — ' . esc_html( $d->sestka_nazev ) . '</p></div>';
+
+		$odborky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE (typ='oba' OR typ=%s) ORDER BY nazev", $d->typ ) ) ?: [];
+
+		if ( ! $odborka_id ) {
+			echo '<div class="voa-odborky-grid">';
+			foreach ( $odborky as $o ) {
+				$p   = $this->progress( $dite_id, (int)$o->id );
+				$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
+				$cls = 'voa-odborka-card' . ( $p['splneno'] ? ' voa-odborka-card--done' : ( $p['done'] > 0 ? ' voa-odborka-card--partial' : '' ) );
+				echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'dite_id' => $dite_id, 'odborka_id' => $o->id ] ) ) . '" class="' . $cls . '">';
+				if ( $o->obrazek ) echo '<img src="' . esc_url( $this->img_url( $o->obrazek ) ) . '" class="voa-odborka-img" alt="">';
+				echo '<div class="voa-odborka-name">' . esc_html( $o->nazev ) . '</div>';
+				if ( $p['splneno'] ) echo '<div class="voa-splneno-badge">✓ Splněno</div>';
+				elseif ( $p['done'] > 0 ) echo '<div class="voa-odborka-progress"><div class="voa-progress-bar-wrap"><div class="voa-progress-bar-fill voa-progress-bar-fill--orange" style="width:' . $pct . '%"></div></div><span class="voa-progress-text">' . $p['done'] . '/' . $p['total'] . '</span></div>';
+				echo '</a>';
+			}
+			echo '</div>';
+			return;
+		}
+
+		$odborka = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE id=%d", $odborka_id ) );
+		if ( ! $odborka ) { echo '<div class="voa-empty">Odborka nenalezena.</div>'; return; }
+		$p   = $this->progress( $dite_id, $odborka_id );
+		$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
+
+		echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'dite_id' => $dite_id ] ) ) . '" class="voa-back" style="display:block;margin-bottom:16px">← Odborky</a>';
+		echo '<div class="voa-plneni-header">';
+		if ( $odborka->obrazek ) echo '<img src="' . esc_url( $this->img_url( $odborka->obrazek ) ) . '" class="voa-plneni-img" alt="">';
+		echo '<div class="voa-plneni-info"><h2>' . esc_html( $odborka->nazev ) . '</h2><p class="voa-muted" style="margin:2px 0">' . esc_html( $d->prezdivka ) . '</p>';
+		echo '<div class="voa-progress-big"><div class="voa-progress-bar-wrap voa-progress-bar-wrap--lg"><div class="voa-progress-bar-fill ' . ( $p['splneno'] ? 'voa-progress-bar-fill--green' : 'voa-progress-bar-fill--orange' ) . '" style="width:' . $pct . '%"></div></div>';
+		echo '<span class="voa-progress-text">' . $p['done'] . '/' . $p['total'] . ' úkolů';
+		if ( $p['splneno'] ) echo ' &nbsp;<strong class="voa-green">✓ SPLNĚNO</strong>';
+		else echo ' <span class="voa-muted">(min. ' . $p['min'] . ')</span>';
+		echo '</span></div></div></div>';
+
+		if ( $can_edit ) { echo '<form method="post" class="voa-form">'; echo $this->app_nonce( 'save_plneni' ) . $this->app_base_field(); echo '<input type="hidden" name="_vo_app_action" value="save_plneni"><input type="hidden" name="dite_id" value="' . $dite_id . '"><input type="hidden" name="odborka_id" value="' . $odborka_id . '">'; }
+
+		echo '<div class="voa-ukoly-list">';
+		foreach ( $p['ukoly'] as $u ) {
+			$done = ! empty( $u->datum_splneni );
+			echo '<div class="voa-ukol' . ( $done ? ' voa-ukol--done' : '' ) . '">';
+			echo '<div class="voa-ukol-num">' . (int)$u->poradi . '</div>';
+			echo '<div class="voa-ukol-body"><div class="voa-ukol-nazev">' . esc_html( $u->nazev ) . '</div>';
+			if ( $can_edit ) {
+				echo '<div class="voa-ukol-inputs"><label>Datum <input type="date" name="datum_' . $u->id . '" value="' . esc_attr( $u->datum_splneni ?? '' ) . '" class="voa-input-date"></label>';
+				echo '<label>Poznámka <input type="text" name="pozn_' . $u->id . '" value="' . esc_attr( $u->poznamka ?? '' ) . '" class="voa-input-note" placeholder="volitelná"></label></div>';
+			} elseif ( $done ) {
+				echo '<div class="voa-ukol-datum">' . esc_html( date_format( date_create( $u->datum_splneni ), 'd. m. Y' ) ) . ( $u->poznamka ? ' — ' . esc_html( $u->poznamka ) : '' ) . '</div>';
+			}
+			echo '</div></div>';
+		}
+		echo '</div>';
+
+		if ( $can_edit ) { echo '<div class="voa-form-actions"><button type="submit" class="voa-btn voa-btn-primary">Uložit plnění</button></div></form>'; }
+	}
+
+	private function app_page_po_detech(): void {
+		global $wpdb;
+		$sestka_id_f = intval( $_GET['sestka_id'] ?? 0 );
+		$sestky      = $wpdb->get_results( "SELECT s.*, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_sestky s LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id ORDER BY o.nazev, s.nazev" ) ?: [];
+		echo '<h1 class="voa-page-title">Přehled po dětech</h1>';
+		echo '<div class="voa-tabs" style="margin-bottom:20px"><a href="' . esc_url( $this->app_url( 'po_detech' ) ) . '" class="voa-tab' . ( ! $sestka_id_f ? ' voa-tab--active' : '' ) . '">Vše</a>';
+		foreach ( $sestky as $s ) echo '<a href="' . esc_url( $this->app_url( 'po_detech', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-tab' . ( (int)$s->id === $sestka_id_f ? ' voa-tab--active' : '' ) . '">' . esc_html( $s->nazev ) . '</a>';
+		echo '</div>';
+		$where = $sestka_id_f ? $wpdb->prepare( 'AND d.sestka_id=%d', $sestka_id_f ) : '';
+		$deti  = $wpdb->get_results( "SELECT d.*, s.nazev AS sestka_nazev, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_deti d LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE d.aktivni=1 $where ORDER BY o.nazev, s.nazev, d.prijmeni, d.jmeno" ) ?: [];
+		$shown = 0;
+		foreach ( $deti as $d ) {
+			$odborky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE (typ='oba' OR typ=%s) ORDER BY nazev", $d->typ ) ) ?: [];
+			$active  = array_filter( $odborky, fn($o) => $this->progress( (int)$d->id, (int)$o->id )['done'] > 0 );
+			if ( empty( $active ) ) continue;
+			$shown++;
+			echo '<div class="voa-card" style="margin-bottom:12px"><div class="voa-card-head"><a href="' . esc_url( $this->app_url( 'dite', [ 'dite_id' => $d->id ] ) ) . '" class="voa-dite-link"><strong>' . esc_html( $d->prezdivka ) . '</strong> <span class="voa-muted">' . esc_html( $d->jmeno . ' ' . $d->prijmeni ) . '</span></a><span class="voa-muted">' . esc_html( $d->oddil_nazev . ' / ' . $d->sestka_nazev ) . '</span></div>';
+			echo '<div class="voa-odborky-row">';
+			foreach ( $active as $o ) {
+				$p   = $this->progress( (int)$d->id, (int)$o->id );
+				$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
+				echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'dite_id' => $d->id, 'odborka_id' => $o->id ] ) ) . '" class="voa-odborka-mini' . ( $p['splneno'] ? ' voa-odborka-mini--done' : '' ) . '">';
+				if ( $o->obrazek ) echo '<img src="' . esc_url( $this->img_url( $o->obrazek ) ) . '" style="width:28px;height:28px;object-fit:contain" alt="">';
+				echo '<div>' . esc_html( $o->nazev ) . '</div>';
+				if ( $p['splneno'] ) echo '<div class="voa-green" style="font-size:11px;font-weight:700">✓ Splněno</div>';
+				else { echo '<div class="voa-progress-bar-wrap" style="width:100%;margin-top:2px"><div class="voa-progress-bar-fill voa-progress-bar-fill--orange" style="width:' . $pct . '%"></div></div><div style="font-size:11px">' . $p['done'] . '/' . $p['total'] . '</div>'; }
+				echo '</a>';
+			}
+			echo '</div></div>';
+		}
+		if ( ! $shown ) echo '<div class="voa-empty">Žádná data k zobrazení.</div>';
+	}
+
+	private function app_page_po_odborkach(): void {
+		global $wpdb;
+		$odborky = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_odborky ORDER BY typ, nazev" ) ?: [];
+		echo '<h1 class="voa-page-title">Přehled po odborkách</h1>';
+		foreach ( $odborky as $o ) {
+			$deti = $wpdb->get_results( $wpdb->prepare(
+				"SELECT DISTINCT d.*, s.nazev AS sestka_nazev, s.id AS sestka_id FROM {$wpdb->prefix}vo_deti d
+				 JOIN {$wpdb->prefix}vo_plneni p ON p.dite_id=d.id JOIN {$wpdb->prefix}vo_ukoly u ON u.id=p.ukol_id AND u.odborka_id=%d
+				 JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id WHERE d.aktivni=1 ORDER BY d.prijmeni, d.jmeno", $o->id
+			) ) ?: [];
+			if ( empty( $deti ) ) continue;
+			usort( $deti, fn($a,$b) => $this->progress( (int)$b->id, (int)$o->id )['done'] <=> $this->progress( (int)$a->id, (int)$o->id )['done'] );
+			echo '<div class="voa-card" style="margin-bottom:16px"><div class="voa-card-head">';
+			if ( $o->obrazek ) echo '<img src="' . esc_url( $this->img_url( $o->obrazek ) ) . '" style="width:36px;height:36px;object-fit:contain" alt="">';
+			echo '<h3 style="margin:0">' . esc_html( $o->nazev ) . '</h3><span class="voa-muted">' . count( $deti ) . ' dětí plní</span></div>';
+			echo '<div class="voa-children-progress">';
+			foreach ( $deti as $d ) {
+				$p   = $this->progress( (int)$d->id, (int)$o->id );
+				$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
+				echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'dite_id' => $d->id, 'odborka_id' => $o->id ] ) ) . '" class="voa-progress-row">';
+				echo '<span class="voa-progress-name"><strong>' . esc_html( $d->prezdivka ) . '</strong> <span class="voa-muted">' . esc_html( $d->prijmeni ) . '</span></span>';
+				echo '<div class="voa-progress-bar-wrap voa-progress-bar-wrap--md"><div class="voa-progress-bar-fill ' . ( $p['splneno'] ? 'voa-progress-bar-fill--green' : 'voa-progress-bar-fill--orange' ) . '" style="width:' . $pct . '%"></div></div>';
+				if ( $p['splneno'] ) echo '<span class="voa-green" style="font-size:12px;font-weight:700;white-space:nowrap">✓ Splněno</span>';
+				else echo '<span style="font-size:12px;white-space:nowrap">' . $p['done'] . '/' . $p['total'] . '</span>';
+				echo '</a>';
+			}
+			echo '</div></div>';
+		}
+	}
+
+	private function app_page_deti(): void {
+		global $wpdb;
+		$all_sestky = $wpdb->get_results( "SELECT s.*, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_sestky s LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id ORDER BY o.nazev, s.nazev" ) ?: [];
+		$my_sestky  = $this->my_sestky();
+		$sestka_id  = intval( $_GET['sestka_id'] ?? ( $my_sestky[0]->id ?? ( $all_sestky[0]->id ?? 0 ) ) );
+		$edit_id    = intval( $_GET['edit_id'] ?? 0 );
+		$edit_d     = $edit_id ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE id=%d", $edit_id ) ) : null;
+		$can_edit   = $this->can_edit_sestka( $sestka_id );
+
+		echo '<h1 class="voa-page-title">Správa dětí</h1>';
+		echo '<div class="voa-tabs" style="margin-bottom:20px">';
+		foreach ( $all_sestky as $s ) echo '<a href="' . esc_url( $this->app_url( 'deti', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-tab' . ( (int)$s->id === $sestka_id ? ' voa-tab--active' : '' ) . '">' . esc_html( $s->oddil_nazev . ' — ' . $s->nazev ) . '</a>';
+		echo '</div>';
+
+		$deti = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d ORDER BY prijmeni, jmeno", $sestka_id ) ) ?: [];
+		echo '<div class="voa-card" style="margin-bottom:20px"><table class="voa-table"><thead><tr><th>Příjmení</th><th>Jméno</th><th>Přezdívka</th><th>Aktivní</th><th></th></tr></thead><tbody>';
+		foreach ( $deti as $d ) {
+			echo '<tr' . ( $d->aktivni ? '' : ' style="opacity:.55"' ) . '><td>' . esc_html( $d->prijmeni ) . '</td><td>' . esc_html( $d->jmeno ) . '</td><td><strong>' . esc_html( $d->prezdivka ) . '</strong></td><td>' . ( $d->aktivni ? '<span class="voa-green">✓</span>' : '–' ) . '</td>';
+			echo '<td class="voa-table-actions"><a href="' . esc_url( $this->app_url( 'dite', [ 'dite_id' => $d->id ] ) ) . '" class="voa-link">Detail</a>';
+			if ( $can_edit ) {
+				echo ' <a href="' . esc_url( $this->app_url( 'deti', [ 'sestka_id' => $sestka_id, 'edit_id' => $d->id ] ) ) . '" class="voa-link">Upravit</a>';
+				echo ' <form style="display:inline" method="post">' . $this->app_nonce( 'delete_dite' ) . $this->app_base_field() . '<input type="hidden" name="_vo_app_action" value="delete_dite"><input type="hidden" name="dite_id" value="' . $d->id . '"><button class="voa-link voa-link-danger" onclick="return confirm(\'Smazat?\')">Smazat</button></form>';
+			}
+			echo '</td></tr>';
+		}
+		echo '</tbody></table></div>';
+
+		if ( $can_edit ) {
+			$edit_sestky = $this->is_admin() ? $all_sestky : array_filter( $all_sestky, fn($s) => $this->can_edit_sestka( (int)$s->id ) );
+			echo '<div class="voa-card"><h3 style="margin:0 0 16px">' . ( $edit_d ? 'Upravit: ' . esc_html( $edit_d->prezdivka ) : 'Přidat dítě' ) . '</h3>';
+			echo '<form method="post" class="voa-form-grid">';
+			echo $this->app_nonce( 'save_dite' ) . $this->app_base_field();
+			echo '<input type="hidden" name="_vo_app_action" value="save_dite">';
+			if ( $edit_d ) echo '<input type="hidden" name="dite_id" value="' . $edit_d->id . '">';
+			echo '<label>Jméno<input type="text" name="jmeno" value="' . esc_attr( $edit_d->jmeno ?? '' ) . '" class="voa-input" required></label>';
+			echo '<label>Příjmení<input type="text" name="prijmeni" value="' . esc_attr( $edit_d->prijmeni ?? '' ) . '" class="voa-input" required></label>';
+			echo '<label>Přezdívka<input type="text" name="prezdivka" value="' . esc_attr( $edit_d->prezdivka ?? '' ) . '" class="voa-input" required></label>';
+			if ( $edit_d ) {
+				echo '<label>Šestka/roj<select name="sestka_id" class="voa-input">';
+				foreach ( $edit_sestky as $s ) echo '<option value="' . $s->id . '"' . selected( (int)$edit_d->sestka_id, (int)$s->id, false ) . '>' . esc_html( $s->oddil_nazev . ' — ' . $s->nazev ) . '</option>';
+				echo '</select></label>';
+			} else {
+				echo '<input type="hidden" name="sestka_id" value="' . $sestka_id . '">';
+			}
+			echo '<label class="voa-checkbox" style="align-self:end"><input type="checkbox" name="aktivni" value="1"' . ( ( $edit_d->aktivni ?? 1 ) ? ' checked' : '' ) . '> Aktivní</label>';
+			echo '<div class="voa-form-actions"><button type="submit" class="voa-btn voa-btn-primary">Uložit</button>';
+			if ( $edit_d ) echo ' <a href="' . esc_url( $this->app_url( 'deti', [ 'sestka_id' => $sestka_id ] ) ) . '" class="voa-btn voa-btn-secondary">Zrušit</a>';
+			echo '</div></form></div>';
+		}
+	}
+
+	private function app_page_oddily(): void {
+		if ( ! $this->is_admin() ) { echo '<div class="voa-empty">Přístup odepřen.</div>'; return; }
+		global $wpdb;
+		$oddil_id = intval( $_GET['oddil_id'] ?? 0 );
+		$edit_o   = intval( $_GET['edit_o'] ?? 0 );
+		$edit_s   = intval( $_GET['edit_s'] ?? 0 );
+		$eo       = $edit_o ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_oddily WHERE id=%d", $edit_o ) ) : null;
+		$es       = $edit_s ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_sestky WHERE id=%d", $edit_s ) ) : null;
+		$oddily   = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_oddily ORDER BY nazev" ) ?: [];
+		$authors  = get_users( [ 'role__in' => [ 'administrator', 'editor', 'author' ], 'orderby' => 'display_name' ] );
+
+		echo '<h1 class="voa-page-title">Oddíly a šestky</h1>';
+		echo '<div class="voa-tabs" style="margin-bottom:20px">';
+		foreach ( $oddily as $o ) echo '<a href="' . esc_url( $this->app_url( 'oddily', [ 'oddil_id' => $o->id ] ) ) . '" class="voa-tab' . ( (int)$o->id === $oddil_id ? ' voa-tab--active' : '' ) . '">' . esc_html( $o->nazev ) . '</a>';
+		echo '</div>';
+
+		echo '<div class="voa-card" style="margin-bottom:20px"><h3 style="padding:16px 20px;margin:0;border-bottom:1px solid #F0E8DC">' . ( $eo ? 'Upravit oddíl' : 'Přidat oddíl' ) . '</h3><div style="padding:16px 20px">';
+		echo '<form method="post" class="voa-form-row">';
+		echo $this->app_nonce( 'save_oddil' ) . $this->app_base_field();
+		echo '<input type="hidden" name="_vo_app_action" value="save_oddil">';
+		if ( $eo ) echo '<input type="hidden" name="oddil_id" value="' . $eo->id . '">';
+		echo '<input type="text" name="nazev" value="' . esc_attr( $eo->nazev ?? '' ) . '" class="voa-input" placeholder="Název oddílu" required>';
+		echo '<select name="typ" class="voa-input"><option value="vlcata"' . selected( $eo->typ ?? '', 'vlcata', false ) . '>Vlčata</option><option value="svetlusky"' . selected( $eo->typ ?? '', 'svetlusky', false ) . '>Světlušky</option></select>';
+		echo '<button type="submit" class="voa-btn voa-btn-primary">Uložit oddíl</button>';
+		if ( $eo ) echo ' <a href="' . esc_url( $this->app_url( 'oddily', [ 'oddil_id' => $oddil_id ] ) ) . '" class="voa-btn voa-btn-secondary">Zrušit</a>';
+		echo '</form></div></div>';
+
+		if ( ! $oddil_id ) return;
+		$oddil  = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_oddily WHERE id=%d", $oddil_id ) );
+		$sestky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_sestky WHERE oddil_id=%d ORDER BY nazev", $oddil_id ) ) ?: [];
+
+		echo '<div class="voa-card" style="margin-bottom:20px">';
+		echo '<div class="voa-card-head"><h3 style="margin:0">Šestky / roje — ' . esc_html( $oddil->nazev ) . '</h3>';
+		echo '<span class="voa-muted">' . $this->typ_label( $oddil->typ ) . '</span></div>';
+		echo '<div style="padding:8px 20px">';
+		foreach ( $sestky as $s ) {
+			$vedouci_ids = array_column( $wpdb->get_results( $wpdb->prepare( "SELECT user_id FROM {$wpdb->prefix}vo_vedouci WHERE sestka_id=%d", $s->id ) ) ?: [], 'user_id' );
+			$cnt         = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1", $s->id ) );
+			echo '<div class="voa-sestka-row"><div class="voa-sestka-info"><strong>' . esc_html( $s->nazev ) . '</strong> <span class="voa-muted">(' . $cnt . ' dětí)</span>';
+			if ( ! empty( $vedouci_ids ) ) {
+				$names = array_filter( array_map( fn($uid) => get_userdata($uid)->display_name ?? null, $vedouci_ids ) );
+				echo '<br><span class="voa-muted" style="font-size:13px">Vedoucí: ' . esc_html( implode( ', ', $names ) ) . '</span>';
+			}
+			echo '</div><div class="voa-sestka-actions"><a href="' . esc_url( $this->app_url( 'oddily', [ 'oddil_id' => $oddil_id, 'edit_s' => $s->id ] ) ) . '" class="voa-link">Upravit</a>';
+			echo '<form style="display:inline" method="post">' . $this->app_nonce( 'delete_sestka' ) . $this->app_base_field() . '<input type="hidden" name="_vo_app_action" value="delete_sestka"><input type="hidden" name="sestka_id" value="' . $s->id . '"><input type="hidden" name="oddil_id" value="' . $oddil_id . '"><button class="voa-link voa-link-danger" onclick="return confirm(\'Smazat šestku?\')">Smazat</button></form></div></div>';
+			if ( $es && (int)$es->id === (int)$s->id ) {
+				echo '<div class="voa-sestka-edit-form"><form method="post" class="voa-form-row">';
+				echo $this->app_nonce( 'save_sestka' ) . $this->app_base_field() . '<input type="hidden" name="_vo_app_action" value="save_sestka"><input type="hidden" name="sestka_id" value="' . $s->id . '"><input type="hidden" name="oddil_id" value="' . $oddil_id . '">';
+				echo '<input type="text" name="nazev" value="' . esc_attr( $s->nazev ) . '" class="voa-input"><button type="submit" class="voa-btn voa-btn-primary">Uložit název</button></form>';
+				echo '<form method="post" style="margin-top:12px">' . $this->app_nonce( 'save_vedouci' ) . $this->app_base_field();
+				echo '<input type="hidden" name="_vo_app_action" value="save_vedouci"><input type="hidden" name="sestka_id" value="' . $s->id . '"><input type="hidden" name="oddil_id" value="' . $oddil_id . '">';
+				echo '<div style="font-size:13px;font-weight:600;margin-bottom:6px">Vedoucí:</div><div class="voa-checkboxes">';
+				foreach ( $authors as $u ) {
+					$chk = in_array( $u->ID, array_map('intval', $vedouci_ids) ) ? ' checked' : '';
+					echo '<label style="display:flex;gap:5px;align-items:center;font-size:13px"><input type="checkbox" name="user_ids[]" value="' . $u->ID . '"' . $chk . '> ' . esc_html( $u->display_name ) . '</label>';
+				}
+				echo '</div><div class="voa-form-actions"><button type="submit" class="voa-btn voa-btn-primary">Uložit vedoucí</button> <a href="' . esc_url( $this->app_url( 'oddily', [ 'oddil_id' => $oddil_id ] ) ) . '" class="voa-btn voa-btn-secondary">Zrušit</a></div></form></div>';
+			}
+		}
+		echo '<div style="border-top:1px solid #F0E8DC;padding-top:12px;margin-top:4px"><form method="post" class="voa-form-row">';
+		echo $this->app_nonce( 'save_sestka' ) . $this->app_base_field() . '<input type="hidden" name="_vo_app_action" value="save_sestka"><input type="hidden" name="oddil_id" value="' . $oddil_id . '">';
+		echo '<input type="text" name="nazev" class="voa-input" placeholder="Název nové šestky/roje" required><button type="submit" class="voa-btn voa-btn-primary">Přidat</button></form></div>';
+		echo '</div></div>';
+
+		echo '<div class="voa-card"><div style="padding:16px 20px;display:flex;gap:8px">';
+		echo '<a href="' . esc_url( $this->app_url( 'oddily', [ 'oddil_id' => $oddil_id, 'edit_o' => $oddil_id ] ) ) . '" class="voa-btn voa-btn-secondary">Přejmenovat oddíl</a>';
+		echo '<form method="post">' . $this->app_nonce( 'delete_oddil' ) . $this->app_base_field() . '<input type="hidden" name="_vo_app_action" value="delete_oddil"><input type="hidden" name="oddil_id" value="' . $oddil_id . '"><button type="submit" class="voa-btn voa-btn-danger" onclick="return confirm(\'Smazat celý oddíl?\')">Smazat oddíl</button></form>';
+		echo '</div></div>';
+	}
+
+	private function app_page_filtr(): void {
+		global $wpdb;
+		$odborka_id = intval( $_GET['odborka_id'] ?? 0 );
+		$ukol_id    = intval( $_GET['ukol_id'] ?? 0 );
+		$odborky    = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_odborky ORDER BY typ, nazev" ) ?: [];
+		echo '<h1 class="voa-page-title">Filtr</h1><p class="voa-muted" style="margin-bottom:16px">Děti, které plní odborku, ale chybí jim konkrétní úkol.</p>';
+		echo '<div class="voa-form-row" style="margin-bottom:20px"><label style="font-size:14px;font-weight:600">Odborka <select class="voa-input" onchange="location.href=\'' . esc_js( $this->app_url( 'filtr' ) ) . '&odborka_id=\'+this.value"><option value="">— vyber —</option>';
+		foreach ( $odborky as $o ) echo '<option value="' . $o->id . '"' . selected( $odborka_id, (int)$o->id, false ) . '>' . esc_html( $o->nazev ) . '</option>';
+		echo '</select></label>';
+		if ( $odborka_id ) {
+			$ukoly = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_ukoly WHERE odborka_id=%d ORDER BY poradi", $odborka_id ) ) ?: [];
+			echo '<label style="font-size:14px;font-weight:600">Chybějící úkol <select class="voa-input" onchange="location.href=\'' . esc_js( $this->app_url( 'filtr', [ 'odborka_id' => $odborka_id ] ) ) . '&ukol_id=\'+this.value"><option value="">— vyber —</option>';
+			foreach ( $ukoly as $u ) echo '<option value="' . $u->id . '"' . selected( $ukol_id, (int)$u->id, false ) . '>' . (int)$u->poradi . '. ' . esc_html( $u->nazev ) . '</option>';
+			echo '</select></label>';
+		}
+		echo '</div>';
+		if ( $odborka_id && $ukol_id ) {
+			$vysledky = $wpdb->get_results( $wpdb->prepare(
+				"SELECT DISTINCT d.*, s.nazev AS sestka_nazev, s.id AS sestka_id, o.nazev AS oddil_nazev
+				 FROM {$wpdb->prefix}vo_deti d JOIN {$wpdb->prefix}vo_plneni p ON p.dite_id=d.id
+				 JOIN {$wpdb->prefix}vo_ukoly u ON u.id=p.ukol_id AND u.odborka_id=%d
+				 JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id
+				 WHERE d.aktivni=1 AND d.id NOT IN (SELECT p2.dite_id FROM {$wpdb->prefix}vo_plneni p2 WHERE p2.ukol_id=%d)
+				 ORDER BY d.prijmeni, d.jmeno", $odborka_id, $ukol_id
+			) ) ?: [];
+			$ukol_obj = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_ukoly WHERE id=%d", $ukol_id ) );
+			$odb_obj  = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE id=%d", $odborka_id ) );
+			echo '<div class="voa-card"><div class="voa-card-head"><h3 style="margin:0">' . esc_html( $odb_obj->nazev ) . '</h3><span class="voa-muted">chybí: ' . esc_html( $ukol_obj->nazev ) . '</span></div><div style="padding:12px 20px">';
+			if ( empty( $vysledky ) ) {
+				echo '<div class="voa-alert voa-alert-success">Všichni mají tento úkol splněný. 🎉</div>';
+			} else {
+				echo '<table class="voa-table"><thead><tr><th>Přezdívka</th><th>Příjmení, Jméno</th><th>Oddíl / Šestka</th><th>Postup</th><th></th></tr></thead><tbody>';
+				foreach ( $vysledky as $d ) {
+					$pr  = $this->progress( (int)$d->id, $odborka_id );
+					$pct = $pr['total'] ? round( $pr['done'] / $pr['total'] * 100 ) : 0;
+					echo '<tr><td><strong>' . esc_html( $d->prezdivka ) . '</strong></td><td>' . esc_html( $d->prijmeni . ' ' . $d->jmeno ) . '</td><td>' . esc_html( $d->oddil_nazev . ' / ' . $d->sestka_nazev ) . '</td>';
+					echo '<td><div class="voa-progress-bar-wrap voa-progress-bar-wrap--md"><div class="voa-progress-bar-fill voa-progress-bar-fill--orange" style="width:' . $pct . '%"></div></div> ' . $pr['done'] . '/' . $pr['total'] . '</td>';
+					echo '<td><a href="' . esc_url( $this->app_url( 'plneni', [ 'dite_id' => $d->id, 'odborka_id' => $odborka_id ] ) ) . '" class="voa-link">Plnění</a></td></tr>';
+				}
+				echo '</tbody></table>';
+			}
+			echo '</div></div>';
+		}
+	}
+
 	// ── FRONTEND SHORTCODE ───────────────────────────────────────────────────
 
 	public function shortcode_prehled( array $atts ): string {
@@ -1556,6 +2202,124 @@ class VlcciOdborky {
 .vo-sc-tasks { font-size: 12px; color: #555; margin-top: 4px; }
 .vo-sc-task { margin: 2px 0; }
 .vo-sc-date { color: #888; }
+
+/* ── Frontend App (voa-*) ── */
+:root {
+  --voa-navy:   #20649B;
+  --voa-orange: #ECA038;
+  --voa-green:  #008836;
+  --voa-coral:  #EA614A;
+  --voa-cream:  #FDF6EC;
+  --voa-brown:  #A38456;
+  --voa-purple: #A87A93;
+  --voa-blue:   #6B96CA;
+  --voa-border: #E8D8C0;
+}
+.voa-wrap { font-family: inherit; background: var(--voa-cream); min-height: 60vh; border-radius: 10px; overflow: hidden; border: 1px solid var(--voa-border); }
+/* Nav */
+.voa-nav { background: var(--voa-navy); padding: 0 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.voa-nav a { display: inline-block; padding: 12px 16px; color: rgba(255,255,255,.8); text-decoration: none; font-size: 14px; border-bottom: 3px solid transparent; transition: color .2s, border-color .2s; }
+.voa-nav a:hover { color: #fff; }
+.voa-nav a.voa-nav-active { color: #fff; border-bottom-color: var(--voa-orange); font-weight: 600; }
+.voa-nav-spacer { flex: 1; }
+.voa-nav-user { color: rgba(255,255,255,.65); font-size: 13px; padding: 12px 0; }
+/* Content */
+.voa-content { padding: 24px 20px; }
+/* Alerts */
+.voa-alert { padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; font-size: 14px; }
+.voa-alert-success { background: #e6f4ec; color: #1a5c30; border-left: 4px solid var(--voa-green); }
+.voa-alert-error   { background: #fdecea; color: #8c1d0f; border-left: 4px solid var(--voa-coral); }
+/* Buttons */
+.voa-btn { display: inline-block; padding: 8px 18px; border-radius: 6px; font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer; border: none; transition: filter .15s; }
+.voa-btn:hover { filter: brightness(.92); }
+.voa-btn-primary { background: var(--voa-orange); color: #fff; }
+.voa-btn-secondary { background: var(--voa-navy); color: #fff; }
+.voa-btn-success { background: var(--voa-green); color: #fff; }
+.voa-btn-danger { background: var(--voa-coral); color: #fff; font-size: 13px; padding: 5px 12px; }
+.voa-btn-sm { padding: 4px 12px; font-size: 13px; }
+.voa-btn-link { background: none; border: none; cursor: pointer; padding: 0; font-size: inherit; color: var(--voa-navy); text-decoration: underline; }
+/* Login box */
+.voa-login-box { padding: 60px 20px; text-align: center; }
+.voa-login-box p { margin-bottom: 16px; font-size: 16px; color: #555; }
+/* Cards / sections */
+.voa-section-title { font-size: 1.3em; font-weight: 700; color: var(--voa-navy); margin: 0 0 16px; }
+.voa-card-grid { display: flex; flex-wrap: wrap; gap: 16px; }
+.voa-card { background: #fff; border: 1px solid var(--voa-border); border-radius: 8px; padding: 16px 18px; flex: 1; min-width: 200px; }
+.voa-card h3 { margin: 0 0 10px; font-size: 1em; color: var(--voa-navy); }
+/* Badge / status chips */
+.voa-chip { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.voa-chip-ok   { background: #d4edda; color: #155724; }
+.voa-chip-warn { background: #fff3cd; color: #856404; }
+.voa-chip-no   { background: #f8d7da; color: #721c24; }
+/* Dashboard stats */
+.voa-stats { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+.voa-stat-card { background: #fff; border: 1px solid var(--voa-border); border-radius: 8px; padding: 20px 24px; text-align: center; flex: 1; min-width: 120px; }
+.voa-stat-number { font-size: 2.2em; font-weight: 700; color: var(--voa-orange); line-height: 1; }
+.voa-stat-label  { font-size: 13px; color: #777; margin-top: 4px; }
+/* Children grid */
+.voa-deti-grid { display: flex; flex-wrap: wrap; gap: 14px; }
+.voa-dite-card { background: #fff; border: 1px solid var(--voa-border); border-radius: 8px; padding: 14px 16px; min-width: 160px; flex: 1; }
+.voa-dite-card h4 { margin: 0 0 4px; font-size: .95em; color: var(--voa-navy); }
+.voa-dite-card .voa-dite-meta { font-size: 12px; color: #888; margin-bottom: 8px; }
+.voa-dite-card .voa-dite-progress { font-size: 13px; }
+/* Badge grid */
+.voa-odborky-grid { display: flex; flex-wrap: wrap; gap: 14px; }
+.voa-odborka-card { background: #fff; border: 1px solid var(--voa-border); border-radius: 8px; padding: 14px 16px; width: 160px; text-align: center; position: relative; }
+.voa-odborka-card.voa-splnena { border-color: var(--voa-green); background: #f0fdf4; }
+.voa-odborka-card img { width: 64px; height: 64px; object-fit: contain; margin-bottom: 8px; }
+.voa-odborka-card h4 { margin: 0 0 6px; font-size: .85em; color: #333; }
+.voa-odborka-badge-done { position: absolute; top: 8px; right: 8px; font-size: 18px; }
+/* Progress bar */
+.voa-progress { background: #e8d8c0; border-radius: 99px; height: 8px; overflow: hidden; margin: 4px 0; }
+.voa-progress-bar { height: 100%; background: var(--voa-green); border-radius: 99px; transition: width .3s; }
+.voa-progress-bar.voa-progress-partial { background: var(--voa-orange); }
+.voa-progress-label { font-size: 12px; color: #666; }
+/* Plnění task list */
+.voa-plneni-wrap { background: #fff; border: 1px solid var(--voa-border); border-radius: 8px; overflow: hidden; }
+.voa-plneni-wrap table { width: 100%; border-collapse: collapse; }
+.voa-plneni-wrap th { background: var(--voa-navy); color: #fff; padding: 10px 12px; text-align: left; font-size: 13px; }
+.voa-plneni-wrap td { padding: 8px 12px; border-bottom: 1px solid #f0e8dc; font-size: 13px; vertical-align: middle; }
+.voa-plneni-wrap tr:last-child td { border-bottom: none; }
+.voa-plneni-wrap tr.voa-row-done td { background: #f0fdf4; }
+.voa-plneni-wrap input[type=date], .voa-plneni-wrap input[type=text] { width: 100%; padding: 4px 8px; border: 1px solid #d0bfa0; border-radius: 4px; font-size: 13px; background: #fffdf8; }
+.voa-plneni-wrap input[type=date]:focus, .voa-plneni-wrap input[type=text]:focus { outline: none; border-color: var(--voa-orange); box-shadow: 0 0 0 2px rgba(236,160,56,.25); }
+/* Tables */
+.voa-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; border: 1px solid var(--voa-border); }
+.voa-table th { background: var(--voa-navy); color: #fff; padding: 10px 14px; text-align: left; font-size: 13px; }
+.voa-table td { padding: 9px 14px; border-bottom: 1px solid #f0e8dc; font-size: 14px; vertical-align: middle; }
+.voa-table tr:last-child td { border-bottom: none; }
+.voa-table tbody tr:hover td { background: #fffaf3; }
+.voa-table tr.voa-inactive td { opacity: .55; }
+/* Forms */
+.voa-form { background: #fff; border: 1px solid var(--voa-border); border-radius: 8px; padding: 20px 22px; max-width: 520px; }
+.voa-form-title { font-size: 1.05em; font-weight: 700; color: var(--voa-navy); margin: 0 0 16px; }
+.voa-form-group { margin-bottom: 14px; }
+.voa-form-group label { display: block; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 4px; }
+.voa-form-group input[type=text], .voa-form-group input[type=date], .voa-form-group select, .voa-form-group textarea { width: 100%; padding: 8px 10px; border: 1px solid #d0bfa0; border-radius: 5px; font-size: 14px; background: #fffdf8; box-sizing: border-box; }
+.voa-form-group input:focus, .voa-form-group select:focus, .voa-form-group textarea:focus { outline: none; border-color: var(--voa-orange); box-shadow: 0 0 0 2px rgba(236,160,56,.25); }
+.voa-form-actions { display: flex; gap: 10px; align-items: center; margin-top: 18px; }
+.voa-inline-form { display: inline; }
+/* Tabs */
+.voa-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.voa-tab { display: inline-block; padding: 7px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; text-decoration: none; border: 2px solid var(--voa-border); color: var(--voa-brown); background: #fff; transition: all .15s; }
+.voa-tab:hover { border-color: var(--voa-orange); color: var(--voa-orange); }
+.voa-tab-active { background: var(--voa-orange); border-color: var(--voa-orange); color: #fff; }
+.voa-tab-done { border-color: var(--voa-green); color: var(--voa-green); }
+.voa-tab-done.voa-tab-active { background: var(--voa-green); color: #fff; }
+/* Filtr */
+.voa-filtr-result { margin-top: 20px; }
+/* Misc */
+.voa-mb { margin-bottom: 20px; }
+.voa-mt { margin-top: 20px; }
+.voa-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.voa-back-link { display: inline-block; margin-bottom: 16px; font-size: 13px; color: var(--voa-navy); text-decoration: none; }
+.voa-back-link:hover { text-decoration: underline; }
+@media (max-width: 600px) {
+  .voa-nav a { padding: 10px 10px; font-size: 13px; }
+  .voa-content { padding: 16px 12px; }
+  .voa-stat-card { min-width: 100px; }
+  .voa-odborka-card { width: 130px; }
+}
 </style>';
 	}
 }
