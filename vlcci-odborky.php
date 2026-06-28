@@ -1454,7 +1454,7 @@ class VlcciOdborky {
 	private function app_url( string $page = 'dashboard', array $extra = [] ): string {
 		global $post;
 		$base  = get_permalink( $post ) ?: home_url( '/' );
-		$clean = remove_query_arg( [ 'vo', 'dite_id', 'odborka_id', 'sestka_id', 'oddil_id', 'edit_id', 'edit_o', 'edit_s' ], $base );
+		$clean = remove_query_arg( [ 'vo', 'dite_id', 'odborka_id', 'sestka_id', 'oddil_id', 'edit_id', 'edit_o', 'edit_s', 'ukol_id' ], $base );
 		return add_query_arg( array_merge( [ 'vo' => $page ], $extra ), $clean );
 	}
 
@@ -1472,7 +1472,7 @@ class VlcciOdborky {
 	}
 
 	private function app_redirect( string $base_url, string $page, array $extra = [] ): void {
-		$clean = remove_query_arg( [ 'vo', 'dite_id', 'odborka_id', 'sestka_id', 'oddil_id', 'edit_id', 'edit_o', 'edit_s' ], $base_url );
+		$clean = remove_query_arg( [ 'vo', 'dite_id', 'odborka_id', 'sestka_id', 'oddil_id', 'edit_id', 'edit_o', 'edit_s', 'ukol_id' ], $base_url );
 		wp_safe_redirect( add_query_arg( array_merge( [ 'vo' => $page ], $extra ), $clean ) );
 		exit;
 	}
@@ -1915,6 +1915,104 @@ class VlcciOdborky {
 
 	private function app_page_po_odborkach(): void {
 		global $wpdb;
+		$odborka_id = intval( $_GET['odborka_id'] ?? 0 );
+		$ukol_id    = intval( $_GET['ukol_id'] ?? 0 );
+
+		// === Úroveň 3: detail úkolu — kdo ho nemá splněný ===
+		if ( $odborka_id && $ukol_id ) {
+			$odborka = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE id=%d", $odborka_id ) );
+			$ukol    = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_ukoly WHERE id=%d AND odborka_id=%d", $ukol_id, $odborka_id ) );
+			if ( ! $odborka || ! $ukol ) { echo '<div class="voa-empty">Nenalezeno.</div>'; return; }
+			echo '<a href="' . esc_url( $this->app_url( 'po_odborkach', [ 'odborka_id' => $odborka_id ] ) ) . '" class="voa-back" style="display:block;margin-bottom:16px">← ' . esc_html( $odborka->nazev ) . '</a>';
+			echo '<h1 class="voa-page-title">' . esc_html( $ukol->nazev ) . '</h1>';
+			echo '<p class="voa-muted" style="margin-bottom:16px">Děti, které tento úkol nemají splněný</p>';
+			$deti_chybi = $wpdb->get_results( $wpdb->prepare(
+				"SELECT d.*, s.nazev AS sestka_nazev FROM {$wpdb->prefix}vo_deti d
+				 LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id
+				 WHERE d.aktivni=1
+				   AND (d.typ=%s OR d.typ IS NULL OR d.typ='')
+				   AND d.id NOT IN (
+				       SELECT dite_id FROM {$wpdb->prefix}vo_plneni
+				       WHERE ukol_id=%d AND datum_splneni IS NOT NULL AND datum_splneni != \'\'
+				   )
+				 ORDER BY s.nazev, d.prijmeni, d.jmeno",
+				$odborka->typ === 'oba' ? 'vlci' : $odborka->typ, $ukol_id
+			) ) ?: [];
+			if ( $odborka->typ === 'oba' ) {
+				$deti_chybi = $wpdb->get_results( $wpdb->prepare(
+					"SELECT d.*, s.nazev AS sestka_nazev FROM {$wpdb->prefix}vo_deti d
+					 LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id
+					 WHERE d.aktivni=1
+					   AND d.id NOT IN (
+					       SELECT dite_id FROM {$wpdb->prefix}vo_plneni
+					       WHERE ukol_id=%d AND datum_splneni IS NOT NULL AND datum_splneni != \'\'
+					   )
+					 ORDER BY s.nazev, d.prijmeni, d.jmeno",
+					$ukol_id
+				) ) ?: [];
+			}
+			if ( empty( $deti_chybi ) ) {
+				echo '<div class="voa-empty">Všechny aktivní děti mají tento úkol splněný. 🎉</div>';
+				return;
+			}
+			$cur_sestka = null;
+			echo '<div class="voa-card">';
+			foreach ( $deti_chybi as $d ) {
+				if ( $d->sestka_nazev !== $cur_sestka ) {
+					if ( $cur_sestka !== null ) echo '</div>';
+					echo '<div class="voa-ukol-sestka-group"><span class="voa-muted" style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">' . esc_html( $d->sestka_nazev ) . '</span></div><div>';
+					$cur_sestka = $d->sestka_nazev;
+				}
+				$p = $this->progress( (int)$d->id, $odborka_id );
+				echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'dite_id' => $d->id, 'odborka_id' => $odborka_id ] ) ) . '" class="voa-progress-row">';
+				echo '<span class="voa-progress-name"><strong>' . esc_html( $d->prezdivka ) . '</strong> <span class="voa-muted">' . esc_html( $d->prijmeni ) . '</span></span>';
+				$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
+				echo '<div class="voa-progress-bar-wrap voa-progress-bar-wrap--md"><div class="voa-progress-bar-fill voa-progress-bar-fill--orange" style="width:' . $pct . '%"></div></div>';
+				echo '<span style="font-size:12px;white-space:nowrap">' . $p['done'] . '/' . $p['total'] . '</span>';
+				echo '</a>';
+			}
+			echo '</div></div>';
+			return;
+		}
+
+		// === Úroveň 2: detail odborky — seznam úkolů s počtem chybějících ===
+		if ( $odborka_id ) {
+			$odborka = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE id=%d", $odborka_id ) );
+			if ( ! $odborka ) { echo '<div class="voa-empty">Odborka nenalezena.</div>'; return; }
+			echo '<a href="' . esc_url( $this->app_url( 'po_odborkach' ) ) . '" class="voa-back" style="display:block;margin-bottom:16px">← Přehled po odborkách</a>';
+			echo '<div class="voa-plneni-header">';
+			if ( $odborka->obrazek ) echo '<img src="' . esc_url( $this->img_url( $odborka->obrazek ) ) . '" class="voa-plneni-img" alt="">';
+			echo '<div class="voa-plneni-info"><h1 class="voa-page-title" style="margin:0">' . esc_html( $odborka->nazev ) . '</h1>';
+			echo '<p class="voa-muted">Klikni na úkol a uvidíš, komu chybí</p></div></div>';
+			$ukoly = $wpdb->get_results( $wpdb->prepare(
+				"SELECT * FROM {$wpdb->prefix}vo_ukoly WHERE odborka_id=%d ORDER BY poradi", $odborka_id
+			) ) ?: [];
+			$celkem_aktivnich = (int) $wpdb->get_var( $wpdb->prepare(
+				$odborka->typ === 'oba'
+					? "SELECT COUNT(*) FROM {$wpdb->prefix}vo_deti WHERE aktivni=1"
+					: "SELECT COUNT(*) FROM {$wpdb->prefix}vo_deti WHERE aktivni=1 AND typ=%s",
+				$odborka->typ
+			) );
+			echo '<div class="voa-card"><div class="voa-ukoly-list">';
+			foreach ( $ukoly as $u ) {
+				$splneno_count = (int) $wpdb->get_var( $wpdb->prepare(
+					"SELECT COUNT(DISTINCT dite_id) FROM {$wpdb->prefix}vo_plneni
+					 WHERE ukol_id=%d AND datum_splneni IS NOT NULL AND datum_splneni != \'\'", $u->id
+				) );
+				$chybi = $celkem_aktivnich - $splneno_count;
+				echo '<a href="' . esc_url( $this->app_url( 'po_odborkach', [ 'odborka_id' => $odborka_id, 'ukol_id' => $u->id ] ) ) . '" class="voa-ukol voa-ukol-link">';
+				echo '<div class="voa-ukol-num">' . (int)$u->poradi . '</div>';
+				echo '<div class="voa-ukol-body"><div class="voa-ukol-nazev">' . esc_html( $u->nazev ) . '</div></div>';
+				echo '<div class="voa-ukol-chybi">';
+				if ( $chybi > 0 ) echo '<span class="voa-badge-count voa-badge-count--orange">' . $chybi . ' chybí</span>';
+				else echo '<span class="voa-badge-count voa-badge-count--green">všichni ✓</span>';
+				echo '</div></a>';
+			}
+			echo '</div></div>';
+			return;
+		}
+
+		// === Úroveň 1: přehled všech odborek ===
 		$odborky = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_odborky ORDER BY typ, nazev" ) ?: [];
 		echo '<h1 class="voa-page-title">Přehled po odborkách</h1>';
 		foreach ( $odborky as $o ) {
@@ -1926,8 +2024,9 @@ class VlcciOdborky {
 			if ( empty( $deti ) ) continue;
 			usort( $deti, fn($a,$b) => $this->progress( (int)$b->id, (int)$o->id )['done'] <=> $this->progress( (int)$a->id, (int)$o->id )['done'] );
 			echo '<div class="voa-card" style="margin-bottom:16px"><div class="voa-card-head">';
+			echo '<a href="' . esc_url( $this->app_url( 'po_odborkach', [ 'odborka_id' => $o->id ] ) ) . '" class="voa-card-head-link">';
 			if ( $o->obrazek ) echo '<img src="' . esc_url( $this->img_url( $o->obrazek ) ) . '" style="width:36px;height:36px;object-fit:contain" alt="">';
-			echo '<h3 style="margin:0">' . esc_html( $o->nazev ) . '</h3><span class="voa-muted">' . count( $deti ) . ' dětí plní</span></div>';
+			echo '<h3 style="margin:0">' . esc_html( $o->nazev ) . '</h3></a><span class="voa-muted">' . count( $deti ) . ' dětí plní</span></div>';
 			echo '<div class="voa-children-progress">';
 			foreach ( $deti as $d ) {
 				$p   = $this->progress( (int)$d->id, (int)$o->id );
@@ -2318,6 +2417,11 @@ class VlcciOdborky {
 .voa-ukol{display:flex;border-bottom:1px solid #eee}
 .voa-ukol:last-child{border-bottom:none}
 .voa-ukol--done{background:#f0faf0}
+.voa-ukol-link{display:flex;align-items:center;text-decoration:none;color:inherit;border-bottom:1px solid #eee;transition:background .15s}
+.voa-ukol-link:hover{background:#f5faf6}
+.voa-ukol-chybi{padding:0 12px;white-space:nowrap}
+.voa-ukol-sestka-group{padding:8px 12px 2px;background:#f5f5f5;border-bottom:1px solid #eee}
+.voa-card-head-link{display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;flex:1}
 .voa-ukol-num{width:34px;min-width:34px;background:#f5f5f5;display:flex;align-items:flex-start;justify-content:center;padding:10px 0;font-size:12px;color:#888;font-weight:600;border-right:1px solid #eee}
 .voa-ukol--done .voa-ukol-num{background:#d1e7dd;color:#1a5c2a}
 .voa-ukol-body{flex:1;padding:10px 12px}
