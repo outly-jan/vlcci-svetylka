@@ -1849,7 +1849,12 @@ class VlcciOdborky {
 			echo '<form method="post" class="voa-form" id="vo-plneni-form">';
 			echo $this->app_nonce( 'save_plneni' ) . $this->app_base_field();
 			echo '<input type="hidden" name="_vo_app_action" value="save_plneni"><input type="hidden" name="dite_id" value="' . $dite_id . '"><input type="hidden" name="odborka_id" value="' . $odborka_id . '">';
-			$wp_users = get_users( [ 'orderby' => 'display_name', 'fields' => [ 'ID', 'display_name' ] ] );
+			$sestka_vedouci_ids = $wpdb->get_col( $wpdb->prepare(
+				"SELECT user_id FROM {$wpdb->prefix}vo_vedouci WHERE sestka_id=%d", $d->sestka_id
+			) ) ?: [];
+			$wp_users = $sestka_vedouci_ids
+				? get_users( [ 'include' => $sestka_vedouci_ids, 'orderby' => 'display_name', 'fields' => [ 'ID', 'display_name' ] ] )
+				: get_users( [ 'orderby' => 'display_name', 'fields' => [ 'ID', 'display_name' ] ] );
 
 			// Hromadné zadání
 			$users_opts = '';
