@@ -522,8 +522,15 @@ class VlcciOdborky {
 		return current_user_can( 'manage_options' );
 	}
 
+	private function is_vedouci(): bool {
+		if ( ! is_user_logged_in() ) return false;
+		if ( $this->is_admin() ) return true;
+		$user = wp_get_current_user();
+		return in_array( 'vedouc_vlat_a_svtluek', (array) $user->roles, true );
+	}
+
 	private function require_author(): void {
-		if ( ! current_user_can( 'publish_posts' ) ) wp_die( 'Přístup odepřen.' );
+		if ( ! $this->is_vedouci() ) wp_die( 'Přístup odepřen.' );
 	}
 
 	private function can_edit_sestka( int $id ): bool {
@@ -930,7 +937,7 @@ class VlcciOdborky {
 		$sestky  = $wpdb->get_results( "SELECT s.*, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_sestky s LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id ORDER BY o.nazev, s.nazev" ) ?: [];
 
 		// WP users author+
-		$wp_users = get_users( [ 'role__in' => [ 'administrator', 'editor', 'author' ], 'orderby' => 'display_name' ] );
+		$wp_users = get_users( [ 'role__in' => [ 'administrator', 'vedouc_vlat_a_svtluek' ], 'orderby' => 'display_name' ] );
 
 		echo '<div class="wrap vo-wrap">';
 		echo '<h1>Oddíly a šestky/roje</h1>';
@@ -1494,7 +1501,7 @@ class VlcciOdborky {
 
 	public function handle_app_post(): void {
 		if ( empty( $_POST['_vo_app_action'] ) ) return;
-		if ( ! is_user_logged_in() ) return;
+		if ( ! $this->is_vedouci() ) return;
 		$action = sanitize_key( $_POST['_vo_app_action'] );
 		if ( ! wp_verify_nonce( $_POST['_wpnonce'] ?? '', 'vo_app_' . $action ) ) wp_die( 'Neplatný bezpečnostní token.' );
 		$base = esc_url_raw( wp_unslash( $_POST['_vo_app_base'] ?? '' ) ) ?: home_url( '/' );
@@ -1672,7 +1679,7 @@ class VlcciOdborky {
 		if ( ! is_user_logged_in() ) {
 			return '<div class="voa-wrap"><div class="voa-menu"><span style="padding:8px 12px;font-size:13px;color:#555">Odborky</span></div><div class="voa-login-box"><p>Pro přístup k aplikaci se přihlaste.</p><a href="' . esc_url( wp_login_url( get_permalink() ) ) . '" class="voa-btn voa-btn-primary">Přihlásit se</a></div></div>';
 		}
-		if ( ! current_user_can( 'publish_posts' ) ) {
+		if ( ! $this->is_vedouci() ) {
 			return '<div class="voa-wrap"><div class="voa-menu"></div><div class="voa-content"><div class="voa-alert voa-alert-error">Nemáte oprávnění k přístupu.</div></div></div>';
 		}
 		$page = sanitize_key( $_GET['vo'] ?? 'dashboard' );
@@ -2224,7 +2231,7 @@ class VlcciOdborky {
 		$eo       = $edit_o ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_oddily WHERE id=%d", $edit_o ) ) : null;
 		$es       = $edit_s ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_sestky WHERE id=%d", $edit_s ) ) : null;
 		$oddily   = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_oddily ORDER BY nazev" ) ?: [];
-		$authors  = get_users( [ 'role__in' => [ 'administrator', 'editor', 'author' ], 'orderby' => 'display_name' ] );
+		$authors  = get_users( [ 'role__in' => [ 'administrator', 'vedouc_vlat_a_svtluek' ], 'orderby' => 'display_name' ] );
 
 		echo '<h1 class="voa-page-title">Oddíly a šestky</h1>';
 		echo '<div class="voa-tabs" style="margin-bottom:20px">';
