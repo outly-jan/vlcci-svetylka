@@ -1696,6 +1696,7 @@ class VlcciOdborky {
 			case 'deti':          $this->app_page_deti();          break;
 			case 'oddily':        $this->app_page_oddily();        break;
 			case 'filtr':         $this->app_page_filtr();         break;
+			case 'napoveda':      $this->app_page_napoveda();      break;
 			default:              $this->app_page_dashboard();     break;
 		}
 		echo '</div></div>';
@@ -1709,6 +1710,7 @@ class VlcciOdborky {
 			'po_detech'    => '👤 Po dětech',
 			'po_odborkach' => '🏅 Po odborkách',
 			'deti'         => '👶 Správa dětí',
+			'napoveda'     => '❓ Nápověda',
 		];
 		if ( $this->is_admin() ) {
 			$items['oddily'] = '🏕️ Oddíly';
@@ -1725,6 +1727,77 @@ class VlcciOdborky {
 	}
 
 	// ── APP PAGES ─────────────────────────────────────────────────────────────
+
+	private function app_page_napoveda(): void {
+		echo '<h1 class="voa-page-title">Nápověda</h1>';
+		echo '<div class="voa-help">';
+
+		echo '<div class="voa-help-section">';
+		echo '<h2 class="voa-help-h2">Co je tato aplikace?</h2>';
+		echo '<p>Aplikace slouží k evidenci plnění vlčáckých a světluškovských odborek. Každé dítě může plnit různé odborky — každá odborka má sadu úkolů a ke splnění odborky je potřeba splnit stanovený minimální počet úkolů.</p>';
+		echo '</div>';
+
+		echo '<div class="voa-help-section">';
+		echo '<h2 class="voa-help-h2">🏠 Přehled</h2>';
+		echo '<p>Úvodní stránka po přihlášení. Zobrazuje přehled dětí ve tvé šestce / roji a jejich postup u jednotlivých odborek.</p>';
+		echo '</div>';
+
+		echo '<div class="voa-help-section">';
+		echo '<h2 class="voa-help-h2">✏️ Plnění</h2>';
+		echo '<p>Zde zaznamenáváš, které úkoly dítě splnilo.</p>';
+		echo '<ol class="voa-help-steps">';
+		echo '<li>Vyber šestku / roj a klikni na dítě.</li>';
+		echo '<li>Klikni na odborku, které se chceš věnovat.</li>';
+		echo '<li>U každého splněného úkolu vyplň <strong>datum</strong>, volitelně poznámku, a vyber vedoucího, který splnění uznal.</li>';
+		echo '<li>Klikni <strong>Uložit plnění</strong>. Pokud datum smažeš a uložíš, záznam se odstraní.</li>';
+		echo '</ol>';
+		echo '<h3 class="voa-help-h3">✏️ Vyplnit víc úkolů najednou</h3>';
+		echo '<p>Pokud chceš zadat stejné datum a vedoucího pro více úkolů najednou, klikni na tlačítko <em>Vyplnit víc úkolů najednou</em>. Zadej datum, vyber vedoucího, zaškrtni příslušné úkoly (nebo klikni <em>Označit všechny nesplněné</em>) a stiskni <em>Použít na označené</em>. Datum se propíše do vybraných políček — stále je potřeba nakonec kliknout <strong>Uložit plnění</strong>.</p>';
+		echo '<h3 class="voa-help-h3">✅ Přidělit bez dat</h3>';
+		echo '<p>Pokud dítě odborku splnilo ještě před zavedením této aplikace a nechceš dohledávat jednotlivá data, zaškrtni <em>Přidělit bez uvedení data — má ji z dřívějška</em> a klikni <em>Přidělit bez dat</em>. Všechny úkoly odborky se označí jako splněné bez data. Datum pak můžeš kdykoli doplnit ručně.</p>';
+		echo '<h3 class="voa-help-h3">🗑 Smazat veškeré plnění odborky</h3>';
+		echo '<p>Pokud jsi omylem přidělil/a odborku špatnému dítěti, najdeš dole červené tlačítko <em>Smazat veškeré plnění odborky</em>. Zobrazí se jen tehdy, pokud je u dítěte evidován alespoň jeden splněný úkol.</p>';
+		echo '</div>';
+
+		echo '<div class="voa-help-section">';
+		echo '<h2 class="voa-help-h2">👤 Po dětech</h2>';
+		echo '<p>Přehled všech dětí seřazených podle šestky / roje. Vidíš, které odborky každé dítě plní a jak daleko je. Kliknutím na dítě se dostaneš na detail jeho plnění.</p>';
+		echo '</div>';
+
+		echo '<div class="voa-help-section">';
+		echo '<h2 class="voa-help-h2">🏅 Po odborkách</h2>';
+		echo '<p>Přehled odborek — vidíš, které děti danou odborku plní a jak jsou daleko.</p>';
+		echo '<p>Kliknutím na název odborky se dostaneš na seznam jejích úkolů. U každého úkolu je vidět, kolik dětí ho ještě nemá splněný.</p>';
+		echo '<p>Kliknutím na konkrétní úkol zobrazíš seznam dětí, které ho <strong>nemají splněný</strong>. To se hodí třeba tehdy, když chceš vzít na výpravu děti, kterým daný úkol ještě chybí.</p>';
+		echo '</div>';
+
+		echo '<div class="voa-help-section">';
+		echo '<h2 class="voa-help-h2">👶 Správa dětí</h2>';
+		echo '<p>Zde spravuješ seznam dětí ve své šestce / roji.</p>';
+		echo '<ul class="voa-help-list">';
+		echo '<li><strong>Přidat dítě</strong> — vyplň jméno, příjmení a přezdívku.</li>';
+		echo '<li><strong>Upravit</strong> — klikni na <em>Upravit</em> u daného dítěte. Lze změnit jméno i přesunout dítě do jiné šestky.</li>';
+		echo '<li><strong>Aktivní / neaktivní</strong> — neaktivní děti se nezobrazují v přehledech plnění, ale jejich záznamy zůstávají zachovány.</li>';
+		echo '<li><strong>Smazat</strong> — trvale odstraní dítě i veškeré záznamy o plnění.</li>';
+		echo '</ul>';
+		echo '</div>';
+
+		echo '<div class="voa-help-section">';
+		echo '<h2 class="voa-help-h2">Časté dotazy</h2>';
+		echo '<dl class="voa-help-faq">';
+		echo '<dt>Můžu upravit datum nebo vedoucího u již splněného úkolu?</dt>';
+		echo '<dd>Ano — jednoduše přejdi do Plnění, najdi dítě a odborku a přepiš datum nebo vedoucího. Po uložení se záznamy aktualizují.</dd>';
+		echo '<dt>Jak odeberu splnění jednoho konkrétního úkolu?</dt>';
+		echo '<dd>Smaž datum u daného úkolu a klikni Uložit plnění. Prázdné datum = záznam se smaže.</dd>';
+		echo '<dt>Odborka je splněná, ale já vidím jen část úkolů jako hotové — je to v pořádku?</dt>';
+		echo '<dd>Ano — ke splnění odborky stačí minimální počet úkolů (většinou 8 z 10). Jakmile je splněn minimální počet, odborka se označí jako splněná.</dd>';
+		echo '<dt>Přihlašuji se a vidím hlášku „Tento plugin je určený jen pro vedoucí vlčat a světlušek".</dt>';
+		echo '<dd>Tvůj účet nemá přiřazenou roli vedoucího. Požádej administrátora, aby ti ji přidělil.</dd>';
+		echo '</dl>';
+		echo '</div>';
+
+		echo '</div>';
+	}
 
 	private function app_page_dashboard(): void {
 		global $wpdb;
@@ -2483,6 +2556,15 @@ class VlcciOdborky {
 .voa-section-title{margin:16px 0 12px;font-size:16px;color:#222;font-weight:600}
 .voa-page-header{margin-bottom:20px}
 .voa-page-title{font-size:18px;color:#222;font-weight:600;margin:0 0 4px}
+.voa-help{max-width:720px}
+.voa-help-section{background:#fff;border:1px solid #dde8df;border-radius:6px;padding:18px 20px;margin-bottom:16px}
+.voa-help-h2{font-size:15px;color:#1a5c2a;font-weight:700;margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid #e0eee2}
+.voa-help-h3{font-size:13px;color:#333;font-weight:700;margin:14px 0 4px}
+.voa-help-section p{font-size:13px;color:#444;margin:0 0 8px;line-height:1.6}
+.voa-help-steps{font-size:13px;color:#444;margin:0 0 8px;padding-left:20px;line-height:1.8}
+.voa-help-list{font-size:13px;color:#444;margin:0 0 8px;padding-left:20px;line-height:1.8}
+.voa-help-faq dt{font-size:13px;font-weight:700;color:#222;margin-top:12px}
+.voa-help-faq dd{font-size:13px;color:#555;margin:3px 0 0 0;line-height:1.6}
 /* Tabs (URL-based) */
 .voa-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:16px;border-bottom:2px solid #ddd;padding-bottom:0}
 .voa-tab{display:inline-block;font-size:12px;padding:6px 12px;background:#f5f5f5;color:#444;border:1px solid #ccc;border-bottom:none;border-radius:3px 3px 0 0;text-decoration:none;transition:background .15s;margin-bottom:-2px}
