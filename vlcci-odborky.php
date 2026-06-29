@@ -519,7 +519,9 @@ class VlcciOdborky {
 	// ── ACCESS CONTROL ───────────────────────────────────────────────────────
 
 	private function is_admin(): bool {
-		return current_user_can( 'manage_options' );
+		if ( current_user_can( 'manage_options' ) ) return true;
+		$user = wp_get_current_user();
+		return in_array( 'administrator', (array) $user->roles, true );
 	}
 
 	private function is_vedouci(): bool {
