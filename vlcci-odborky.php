@@ -1902,13 +1902,12 @@ class VlcciOdborky {
 		$odborka_id = intval( $_GET['odborka_id'] ?? 0 );
 		$sestka_id  = intval( $_GET['sestka_id'] ?? 0 );
 		$my_sestky  = $this->my_sestky();
-		$all_sestky = $wpdb->get_results( "SELECT s.*, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_sestky s LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id ORDER BY o.nazev, s.nazev" ) ?: [];
 
 		if ( ! $dite_id ) {
 			if ( ! $sestka_id && ! empty( $my_sestky ) ) $sestka_id = (int)$my_sestky[0]->id;
 			echo '<h1 class="voa-page-title">Plnění — vyber dítě</h1>';
 			echo '<div class="voa-tabs" style="margin-bottom:20px">';
-			foreach ( $all_sestky as $s ) {
+			foreach ( $my_sestky as $s ) {
 				$cls = (int)$s->id === $sestka_id ? ' voa-tab--active' : '';
 				echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-tab' . $cls . '">' . esc_html( $s->oddil_nazev . ' — ' . $s->nazev ) . '</a>';
 			}
@@ -2099,12 +2098,13 @@ class VlcciOdborky {
 	private function app_page_po_detech(): void {
 		global $wpdb;
 		$sestka_id_f = intval( $_GET['sestka_id'] ?? 0 );
-		$sestky      = $wpdb->get_results( "SELECT s.*, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_sestky s LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id ORDER BY o.nazev, s.nazev" ) ?: [];
+		$sestky      = $this->my_sestky();
 		echo '<h1 class="voa-page-title">Přehled po dětech</h1>';
 		echo '<div class="voa-tabs" style="margin-bottom:20px"><a href="' . esc_url( $this->app_url( 'po_detech' ) ) . '" class="voa-tab' . ( ! $sestka_id_f ? ' voa-tab--active' : '' ) . '">Vše</a>';
 		foreach ( $sestky as $s ) echo '<a href="' . esc_url( $this->app_url( 'po_detech', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-tab' . ( (int)$s->id === $sestka_id_f ? ' voa-tab--active' : '' ) . '">' . esc_html( $s->nazev ) . '</a>';
 		echo '</div>';
-		$where = $sestka_id_f ? $wpdb->prepare( 'AND d.sestka_id=%d', $sestka_id_f ) : '';
+		$my_ids = array_map( fn($s) => (int)$s->id, $sestky );
+		$where  = $sestka_id_f ? $wpdb->prepare( 'AND d.sestka_id=%d', $sestka_id_f ) : ( $my_ids ? 'AND d.sestka_id IN (' . implode( ',', $my_ids ) . ')' : 'AND 1=0' );
 		$deti  = $wpdb->get_results( "SELECT d.*, s.nazev AS sestka_nazev, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_deti d LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE d.aktivni=1 $where ORDER BY o.nazev, s.nazev, d.prijmeni, d.jmeno" ) ?: [];
 		$shown = 0;
 		foreach ( $deti as $d ) {
@@ -2316,16 +2316,15 @@ class VlcciOdborky {
 
 	private function app_page_deti(): void {
 		global $wpdb;
-		$all_sestky = $wpdb->get_results( "SELECT s.*, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_sestky s LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id ORDER BY o.nazev, s.nazev" ) ?: [];
 		$my_sestky  = $this->my_sestky();
-		$sestka_id  = intval( $_GET['sestka_id'] ?? ( $my_sestky[0]->id ?? ( $all_sestky[0]->id ?? 0 ) ) );
+		$sestka_id  = intval( $_GET['sestka_id'] ?? ( $my_sestky[0]->id ?? 0 ) );
 		$edit_id    = intval( $_GET['edit_id'] ?? 0 );
 		$edit_d     = $edit_id ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE id=%d", $edit_id ) ) : null;
 		$can_edit   = $this->can_edit_sestka( $sestka_id );
 
 		echo '<h1 class="voa-page-title">Správa dětí</h1>';
 		echo '<div class="voa-tabs" style="margin-bottom:20px">';
-		foreach ( $all_sestky as $s ) echo '<a href="' . esc_url( $this->app_url( 'deti', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-tab' . ( (int)$s->id === $sestka_id ? ' voa-tab--active' : '' ) . '">' . esc_html( $s->oddil_nazev . ' — ' . $s->nazev ) . '</a>';
+		foreach ( $my_sestky as $s ) echo '<a href="' . esc_url( $this->app_url( 'deti', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-tab' . ( (int)$s->id === $sestka_id ? ' voa-tab--active' : '' ) . '">' . esc_html( $s->oddil_nazev . ' — ' . $s->nazev ) . '</a>';
 		echo '</div>';
 
 		$deti = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d ORDER BY prijmeni, jmeno", $sestka_id ) ) ?: [];
