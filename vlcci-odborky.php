@@ -1728,12 +1728,12 @@ class VlcciOdborky {
 			$items['oddily'] = '🏕️ Oddíly';
 			$items['filtr']  = '🔍 Filtr';
 		}
-		$html = '<nav class="voa-menu">';
+		$html  = '<div class="voa-menu-user">👤 ' . esc_html( wp_get_current_user()->display_name ) . '</div>';
+		$html .= '<nav class="voa-menu">';
 		foreach ( $items as $key => $label ) {
 			$cls   = $key === $active ? ' voa-active' : '';
 			$html .= '<a href="' . esc_url( $this->app_url( $key ) ) . '" class="' . $cls . '">' . $label . '</a>';
 		}
-		$html .= '<span class="voa-menu-user">👤 ' . esc_html( wp_get_current_user()->display_name ) . '</span>';
 		$html .= '</nav>';
 		return $html;
 	}
@@ -2595,7 +2595,7 @@ class VlcciOdborky {
 .voa-menu a{font-size:12px;padding:7px 13px;background:#f0f0f0;color:#444;border:1px solid #ccc;border-bottom:none;border-radius:4px 4px 0 0;white-space:nowrap;text-decoration:none;transition:background .15s;margin-bottom:-1px;display:inline-block}
 .voa-menu a:hover{background:#e0e0e0;color:#333}
 .voa-menu a.voa-active{background:#1a5c2a;color:#fff!important;border-color:#1a5c2a;font-weight:600}
-.voa-menu-user{font-size:12px;color:#555;padding:7px 4px 7px 12px;margin-left:auto;align-self:flex-end}
+.voa-menu-user{font-size:12px;color:#555;padding:4px 2px;text-align:right}
 .voa-content{padding:20px;background:#fff;border:1px solid #1a5c2a;border-top:none}
 .voa-login-box{padding:60px 20px;text-align:center;background:#fff;border:1px solid #1a5c2a;border-top:none}
 .voa-login-box p{margin-bottom:16px;font-size:15px;color:#555}
@@ -2756,7 +2756,7 @@ class VlcciOdborky {
 @media(max-width:640px){
   .voa-menu{flex-direction:column;border-bottom:none;gap:2px}
   .voa-menu a{border-radius:3px;border-bottom:1px solid #ccc;margin-bottom:0}
-  .voa-menu-user{margin-left:0;padding:4px 0}
+  .voa-menu-user{text-align:left;padding:4px 0}
   .voa-content{padding:14px 12px}
   .voa-odborka-card{width:120px}
   .voa-progress-name{width:90px}
