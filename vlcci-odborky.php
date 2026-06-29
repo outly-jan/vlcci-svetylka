@@ -80,12 +80,17 @@ class VlcciOdborky {
 			id int NOT NULL AUTO_INCREMENT,
 			dite_id int NOT NULL,
 			ukol_id int NOT NULL,
-			datum_splneni date NOT NULL,
+			datum_splneni date DEFAULT NULL,
 			poznamka text,
 			vedouci_id int NOT NULL,
 			PRIMARY KEY (id),
 			UNIQUE KEY dite_ukol (dite_id, ukol_id)
 		) $c;" );
+		// Migrace: uvolni NOT NULL na datum_splneni pokud je to ještě třeba
+		$col = $wpdb->get_row( "SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='{$wpdb->prefix}vo_plneni' AND COLUMN_NAME='datum_splneni'" );
+		if ( $col && $col->IS_NULLABLE === 'NO' ) {
+			$wpdb->query( "ALTER TABLE {$wpdb->prefix}vo_plneni MODIFY datum_splneni date DEFAULT NULL" );
+		}
 
 		update_option( 'vo_db_version', '1' );
 		$this->seed_odborky();
@@ -572,7 +577,7 @@ class VlcciOdborky {
 		global $wpdb;
 		$ukoly = $wpdb->get_results( $wpdb->prepare(
 			"SELECT u.id, u.poradi, u.nazev,
-			        p.datum_splneni, p.poznamka, p.vedouci_id
+			        p.id AS plneni_id, p.datum_splneni, p.poznamka, p.vedouci_id
 			 FROM {$wpdb->prefix}vo_ukoly u
 			 LEFT JOIN {$wpdb->prefix}vo_plneni p ON p.ukol_id = u.id AND p.dite_id = %d
 			 WHERE u.odborka_id = %d
@@ -581,7 +586,7 @@ class VlcciOdborky {
 		$min  = (int) $wpdb->get_var( $wpdb->prepare(
 			"SELECT min_ukolu FROM {$wpdb->prefix}vo_odborky WHERE id=%d", $odborka_id
 		) ) ?: 8;
-		$done = count( array_filter( $ukoly, fn( $u ) => ! empty( $u->datum_splneni ) ) );
+		$done = count( array_filter( $ukoly, fn( $u ) => $u->plneni_id !== null ) );
 		return [
 			'done'    => $done,
 			'total'   => count( $ukoly ),
@@ -1502,7 +1507,8 @@ class VlcciOdborky {
 			case 'save_sestka':   $this->app_do_save_sestka( $base );   break;
 			case 'delete_sestka': $this->app_do_delete_sestka( $base ); break;
 			case 'save_vedouci':         $this->app_do_save_vedouci( $base );         break;
-			case 'delete_plneni_odborka': $this->app_do_delete_plneni_odborka( $base ); break;
+			case 'delete_plneni_odborka':  $this->app_do_delete_plneni_odborka( $base );  break;
+			case 'pridat_bez_data':        $this->app_do_pridat_bez_data( $base );        break;
 		}
 	}
 
@@ -1530,6 +1536,25 @@ class VlcciOdborky {
 			}
 		}
 		$this->app_set_flash( 'Plnění uloženo.' );
+		$this->app_redirect( $base, 'plneni', [ 'dite_id' => $dite_id, 'odborka_id' => $odborka_id ] );
+	}
+
+	private function app_do_pridat_bez_data( string $base ): void {
+		global $wpdb;
+		$dite_id    = intval( $_POST['dite_id'] ?? 0 );
+		$odborka_id = intval( $_POST['odborka_id'] ?? 0 );
+		$d = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE id=%d", $dite_id ) );
+		if ( ! $d || ! $this->can_edit_sestka( (int) $d->sestka_id ) ) wp_die( 'Přístup odepřen.' );
+		$ukoly      = $wpdb->get_results( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}vo_ukoly WHERE odborka_id=%d", $odborka_id ) ) ?: [];
+		$vedouci_id = get_current_user_id();
+		foreach ( $ukoly as $u ) {
+			$wpdb->query( $wpdb->prepare(
+				"INSERT INTO {$wpdb->prefix}vo_plneni (dite_id,ukol_id,datum_splneni,poznamka,vedouci_id) VALUES (%d,%d,NULL,'',%d)
+				 ON DUPLICATE KEY UPDATE vedouci_id=vedouci_id",
+				$dite_id, $u->id, $vedouci_id
+			) );
+		}
+		$this->app_set_flash( 'Odborka přidělena (bez data).' );
 		$this->app_redirect( $base, 'plneni', [ 'dite_id' => $dite_id, 'odborka_id' => $odborka_id ] );
 	}
 
@@ -1916,7 +1941,8 @@ class VlcciOdborky {
 
 		echo '<div class="voa-ukoly-list">';
 		foreach ( $p['ukoly'] as $u ) {
-			$done = ! empty( $u->datum_splneni );
+			$done     = $u->plneni_id !== null;
+			$has_date = ! empty( $u->datum_splneni );
 			echo '<div class="voa-ukol' . ( $done ? ' voa-ukol--done' : '' ) . '">';
 			if ( $can_edit ) {
 				echo '<div class="voa-ukol-check-wrap"><input type="checkbox" class="vo-ukol-check" data-ukol="' . (int)$u->id . '" data-done="' . ( $done ? '1' : '0' ) . '"></div>';
@@ -1936,7 +1962,11 @@ class VlcciOdborky {
 			} elseif ( $done ) {
 				$vedouci_str = '';
 				if ( $u->vedouci_id ) { $v = get_userdata( (int) $u->vedouci_id ); if ( $v ) $vedouci_str = ' · Uznal/a: ' . $v->display_name; }
-				echo '<div class="voa-ukol-datum">' . esc_html( date_format( date_create( $u->datum_splneni ), 'd. m. Y' ) ) . ( $u->poznamka ? ' — ' . esc_html( $u->poznamka ) : '' ) . esc_html( $vedouci_str ) . '</div>';
+				if ( $has_date ) {
+					echo '<div class="voa-ukol-datum">' . esc_html( date_format( date_create( $u->datum_splneni ), 'd. m. Y' ) ) . ( $u->poznamka ? ' — ' . esc_html( $u->poznamka ) : '' ) . esc_html( $vedouci_str ) . '</div>';
+				} else {
+					echo '<div class="voa-ukol-datum voa-ukol-datum--bezdata">z dřívějška' . esc_html( $vedouci_str ) . '</div>';
+				}
 			}
 			echo '</div></div>';
 		}
@@ -1944,8 +1974,19 @@ class VlcciOdborky {
 
 		if ( $can_edit ) {
 			echo '<div class="voa-form-actions"><button type="submit" class="voa-btn voa-btn-primary">Uložit plnění</button></div></form>';
+			echo '<div class="voa-extra-actions">';
+			if ( $p['done'] === 0 ) {
+				echo '<form method="post">';
+				echo $this->app_nonce( 'pridat_bez_data' ) . $this->app_base_field();
+				echo '<input type="hidden" name="_vo_app_action" value="pridat_bez_data">';
+				echo '<input type="hidden" name="dite_id" value="' . $dite_id . '">';
+				echo '<input type="hidden" name="odborka_id" value="' . $odborka_id . '">';
+				echo '<label class="voa-checkbox-label"><input type="checkbox" id="vo-bez-data-check" onchange="document.getElementById(\'vo-bez-data-btn\').disabled=!this.checked"> Přidělit bez uvedení data — má ji z dřívějška</label>';
+				echo '<button type="submit" id="vo-bez-data-btn" class="voa-btn voa-btn-secondary" disabled onclick="return confirm(\'Přidělit odborku ' . esc_js( $odborka->nazev ) . ' pro ' . esc_js( $d->prezdivka ) . ' bez data?\')">✅ Přidělit odborku</button>';
+				echo '</form>';
+			}
 			if ( $p['done'] > 0 ) {
-				echo '<form method="post" style="margin-top:12px">';
+				echo '<form method="post">';
 				echo $this->app_nonce( 'delete_plneni_odborka' ) . $this->app_base_field();
 				echo '<input type="hidden" name="_vo_app_action" value="delete_plneni_odborka">';
 				echo '<input type="hidden" name="dite_id" value="' . $dite_id . '">';
@@ -1953,6 +1994,7 @@ class VlcciOdborky {
 				echo '<button type="submit" class="voa-btn voa-btn-danger" onclick="return confirm(\'Opravdu smazat veškeré plnění odborky ' . esc_js( $odborka->nazev ) . ' pro ' . esc_js( $d->prezdivka ) . '?\')">🗑 Smazat veškeré plnění odborky</button>';
 				echo '</form>';
 			}
+			echo '</div>';
 		}
 	}
 
@@ -2414,7 +2456,10 @@ class VlcciOdborky {
 .voa-btn:hover{filter:brightness(.88)}
 .voa-btn-primary{background:#1a5c2a;color:#fff!important}
 .voa-btn-danger{background:#c0392b;color:#fff!important;border-color:#a93226}
-.voa-btn-danger{background:#d63638;color:#fff!important}
+.voa-extra-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid #e0e0e0}
+.voa-extra-actions form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.voa-checkbox-label{font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px}
+.voa-ukol-datum--bezdata{font-style:italic;color:#888}
 .voa-btn-secondary{background:#757575;color:#fff!important}
 .voa-btn-white{background:#fff;color:#1a5c2a!important;border:1px solid #1a5c2a}
 .voa-btn-sm{padding:3px 9px;font-size:12px}
