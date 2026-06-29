@@ -1854,7 +1854,7 @@ class VlcciOdborky {
 		if ( ! $d ) { echo '<div class="voa-empty">Dítě nenalezeno.</div>'; return; }
 		$can_edit = $this->can_edit_sestka( (int) $d->sestka_id );
 
-		echo '<div class="voa-page-header"><a href="' . esc_url( $this->app_url( 'plneni', [ 'sestka_id' => $d->sestka_id ] ) ) . '" class="voa-back">← Zpět</a>';
+		echo '<div class="voa-page-header"><a href="' . esc_url( $this->app_url( 'plneni', [ 'sestka_id' => $d->sestka_id ] ) ) . '" class="voa-back voa-back--bold">← Zpět na šestku / roj</a>';
 		echo '<h1 class="voa-page-title" style="margin:4px 0">' . esc_html( $d->prezdivka ) . '</h1>';
 		echo '<p class="voa-muted">' . esc_html( $d->jmeno . ' ' . $d->prijmeni ) . ' — ' . esc_html( $d->sestka_nazev ) . '</p></div>';
 
@@ -1882,7 +1882,7 @@ class VlcciOdborky {
 		$p   = $this->progress( $dite_id, $odborka_id );
 		$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
 
-		echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'dite_id' => $dite_id ] ) ) . '" class="voa-back" style="display:block;margin-bottom:16px">← Odborky</a>';
+		echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'dite_id' => $dite_id ] ) ) . '" class="voa-back voa-back--bold" style="display:block;margin-bottom:16px">← Zpět na odborky — ' . esc_html( $d->prezdivka ) . '</a>';
 		echo '<div class="voa-plneni-header">';
 		if ( $odborka->obrazek ) echo '<img src="' . esc_url( $this->img_url( $odborka->obrazek ) ) . '" class="voa-plneni-img" alt="">';
 		echo '<div class="voa-plneni-info"><h2>' . esc_html( $odborka->nazev ) . '</h2><p class="voa-muted" style="margin:2px 0">' . esc_html( $d->prezdivka ) . '</p>';
@@ -1902,7 +1902,7 @@ class VlcciOdborky {
 				echo '<input type="hidden" name="dite_id" value="' . $dite_id . '">';
 				echo '<input type="hidden" name="odborka_id" value="' . $odborka_id . '">';
 				echo '<label class="voa-checkbox-label"><input type="checkbox" id="vo-bez-data-check" onchange="document.getElementById(\'vo-bez-data-btn\').disabled=!this.checked"> Přidělit bez uvedení data — má ji z dřívějška</label>';
-				echo '<button type="submit" id="vo-bez-data-btn" class="voa-btn voa-btn-secondary" disabled onclick="return confirm(\'Přidělit odborku ' . esc_js( $odborka->nazev ) . ' pro ' . esc_js( $d->prezdivka ) . ' bez data?\')">✅ Přidělit odborku</button>';
+				echo '<button type="submit" id="vo-bez-data-btn" class="voa-btn voa-btn-secondary" disabled onclick="return confirm(\'Přidělit odborku ' . esc_js( $odborka->nazev ) . ' pro ' . esc_js( $d->prezdivka ) . ' bez data?\')">✅ Přidělit bez dat</button>';
 				echo '</form>';
 				echo '</div>';
 			}
@@ -1924,7 +1924,7 @@ class VlcciOdborky {
 				$users_opts .= '<option value="' . (int)$wu->ID . '"' . $sel . '>' . esc_html( $wu->display_name ) . '</option>';
 			}
 			echo '<div class="voa-bulk-panel" id="vo-bulk-panel">';
-			echo '<div class="voa-bulk-toggle"><button type="button" class="voa-btn voa-btn-secondary" id="vo-bulk-btn">📅 Hromadné vyplnění</button></div>';
+			echo '<div class="voa-bulk-toggle"><button type="button" class="voa-btn voa-btn-secondary" id="vo-bulk-btn">✏️ Vyplnit víc úkolů najednou</button></div>';
 			echo '<div class="voa-bulk-body" id="vo-bulk-body" style="display:none">';
 			echo '<div class="voa-bulk-row">';
 			echo '<label class="voa-bulk-label">Datum <input type="date" id="vo-bulk-date" class="voa-input-date"></label>';
@@ -2511,6 +2511,8 @@ class VlcciOdborky {
 .voa-link-danger{color:#d63638}
 .voa-back{display:inline-block;color:#555;text-decoration:none;font-size:13px;margin-bottom:12px}
 .voa-back:hover{color:#222;text-decoration:underline}
+.voa-back--bold{font-size:14px;font-weight:600;color:#1a5c2a;background:#f0faf2;border:1px solid #b8d4be;border-radius:4px;padding:5px 12px}
+.voa-back--bold:hover{background:#e0f0e5;color:#144a22;text-decoration:none}
 .voa-muted{color:#666;font-size:13px}
 .voa-green{color:#1a5c2a;font-weight:600}
 .voa-empty{color:#888;font-style:italic;margin:12px 0;font-size:13px}
