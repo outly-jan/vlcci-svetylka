@@ -1501,7 +1501,8 @@ class VlcciOdborky {
 			case 'delete_oddil':  $this->app_do_delete_oddil( $base );  break;
 			case 'save_sestka':   $this->app_do_save_sestka( $base );   break;
 			case 'delete_sestka': $this->app_do_delete_sestka( $base ); break;
-			case 'save_vedouci':  $this->app_do_save_vedouci( $base );  break;
+			case 'save_vedouci':         $this->app_do_save_vedouci( $base );         break;
+			case 'delete_plneni_odborka': $this->app_do_delete_plneni_odborka( $base ); break;
 		}
 	}
 
@@ -1530,6 +1531,20 @@ class VlcciOdborky {
 		}
 		$this->app_set_flash( 'Plnění uloženo.' );
 		$this->app_redirect( $base, 'plneni', [ 'dite_id' => $dite_id, 'odborka_id' => $odborka_id ] );
+	}
+
+	private function app_do_delete_plneni_odborka( string $base ): void {
+		global $wpdb;
+		$dite_id    = intval( $_POST['dite_id'] ?? 0 );
+		$odborka_id = intval( $_POST['odborka_id'] ?? 0 );
+		$d = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE id=%d", $dite_id ) );
+		if ( ! $d || ! $this->can_edit_sestka( (int) $d->sestka_id ) ) wp_die( 'Přístup odepřen.' );
+		$ukoly = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}vo_ukoly WHERE odborka_id=%d", $odborka_id ) ) ?: [];
+		foreach ( $ukoly as $ukol_id ) {
+			$wpdb->delete( "{$wpdb->prefix}vo_plneni", [ 'dite_id' => $dite_id, 'ukol_id' => $ukol_id ] );
+		}
+		$this->app_set_flash( 'Plnění odborky bylo smazáno.' );
+		$this->app_redirect( $base, 'plneni', [ 'dite_id' => $dite_id ] );
 	}
 
 	private function app_do_save_dite( string $base ): void {
@@ -1927,7 +1942,18 @@ class VlcciOdborky {
 		}
 		echo '</div>';
 
-		if ( $can_edit ) { echo '<div class="voa-form-actions"><button type="submit" class="voa-btn voa-btn-primary">Uložit plnění</button></div></form>'; }
+		if ( $can_edit ) {
+			echo '<div class="voa-form-actions"><button type="submit" class="voa-btn voa-btn-primary">Uložit plnění</button></div></form>';
+			if ( $p['done'] > 0 ) {
+				echo '<form method="post" style="margin-top:12px">';
+				echo $this->app_nonce( 'delete_plneni_odborka' ) . $this->app_base_field();
+				echo '<input type="hidden" name="_vo_app_action" value="delete_plneni_odborka">';
+				echo '<input type="hidden" name="dite_id" value="' . $dite_id . '">';
+				echo '<input type="hidden" name="odborka_id" value="' . $odborka_id . '">';
+				echo '<button type="submit" class="voa-btn voa-btn-danger" onclick="return confirm(\'Opravdu smazat veškeré plnění odborky ' . esc_js( $odborka->nazev ) . ' pro ' . esc_js( $d->prezdivka ) . '?\')">🗑 Smazat veškeré plnění odborky</button>';
+				echo '</form>';
+			}
+		}
 	}
 
 	private function app_page_po_detech(): void {
@@ -2387,6 +2413,7 @@ class VlcciOdborky {
 .voa-btn{display:inline-block;padding:6px 14px;font-size:13px;font-weight:500;border:none;border-radius:3px;cursor:pointer;text-decoration:none;line-height:1.6;transition:filter .15s;vertical-align:middle}
 .voa-btn:hover{filter:brightness(.88)}
 .voa-btn-primary{background:#1a5c2a;color:#fff!important}
+.voa-btn-danger{background:#c0392b;color:#fff!important;border-color:#a93226}
 .voa-btn-danger{background:#d63638;color:#fff!important}
 .voa-btn-secondary{background:#757575;color:#fff!important}
 .voa-btn-white{background:#fff;color:#1a5c2a!important;border:1px solid #1a5c2a}
