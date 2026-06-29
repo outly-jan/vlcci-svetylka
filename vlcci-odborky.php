@@ -1680,7 +1680,7 @@ class VlcciOdborky {
 			return '<div class="voa-wrap"><div class="voa-menu"><span style="padding:8px 12px;font-size:13px;color:#555">Odborky</span></div><div class="voa-login-box"><p>Pro přístup k aplikaci se přihlaste.</p><a href="' . esc_url( wp_login_url( get_permalink() ) ) . '" class="voa-btn voa-btn-primary">Přihlásit se</a></div></div>';
 		}
 		if ( ! $this->is_vedouci() ) {
-			return '<div class="voa-wrap"><div class="voa-menu"></div><div class="voa-content"><div class="voa-alert voa-alert-error">Nemáte oprávnění k přístupu.</div></div></div>';
+			return '<div class="voa-wrap"><div class="voa-menu"></div><div class="voa-content"><div class="voa-alert voa-alert-error">Tento plugin je určený jen pro vedoucí vlčat a světlušek — a to ty nejsi. Díky za pochopení.</div></div></div>';
 		}
 		$page = sanitize_key( $_GET['vo'] ?? 'dashboard' );
 		ob_start();
