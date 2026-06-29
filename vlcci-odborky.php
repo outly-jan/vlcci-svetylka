@@ -1684,6 +1684,16 @@ class VlcciOdborky {
 		}
 		$page = sanitize_key( $_GET['vo'] ?? 'dashboard' );
 		ob_start();
+		echo '<script>
+(function(){
+  var key="voa_scroll";
+  var y=sessionStorage.getItem(key);
+  if(y!==null){window.scrollTo(0,parseInt(y,10));sessionStorage.removeItem(key);}
+  document.addEventListener("submit",function(e){
+    if(e.target.closest(".voa-wrap")){sessionStorage.setItem(key,window.scrollY);}
+  });
+})();
+</script>';
 		echo '<div class="voa-wrap">';
 		echo $this->app_nav( $page );
 		echo '<div class="voa-content">';
