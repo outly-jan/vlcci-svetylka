@@ -1893,17 +1893,7 @@ class VlcciOdborky {
 		echo '</span></div></div></div>';
 
 		if ( $can_edit ) {
-			echo '<form method="post" class="voa-form" id="vo-plneni-form">';
-			echo $this->app_nonce( 'save_plneni' ) . $this->app_base_field();
-			echo '<input type="hidden" name="_vo_app_action" value="save_plneni"><input type="hidden" name="dite_id" value="' . $dite_id . '"><input type="hidden" name="odborka_id" value="' . $odborka_id . '">';
-			$sestka_vedouci_ids = $wpdb->get_col( $wpdb->prepare(
-				"SELECT user_id FROM {$wpdb->prefix}vo_vedouci WHERE sestka_id=%d", $d->sestka_id
-			) ) ?: [];
-			$wp_users = $sestka_vedouci_ids
-				? get_users( [ 'include' => $sestka_vedouci_ids, 'orderby' => 'display_name', 'fields' => [ 'ID', 'display_name' ] ] )
-				: get_users( [ 'orderby' => 'display_name', 'fields' => [ 'ID', 'display_name' ] ] );
-
-			// Přidělit bez data — zobrazit nahoře jen pokud ještě nic není
+			// Přidělit bez data — samostatný formulář PŘED hlavním formulářem (vnořené formy jsou zakázané)
 			if ( $p['done'] === 0 ) {
 				echo '<div class="voa-extra-actions voa-extra-actions--top">';
 				echo '<form method="post">';
@@ -1916,6 +1906,16 @@ class VlcciOdborky {
 				echo '</form>';
 				echo '</div>';
 			}
+
+			echo '<form method="post" class="voa-form" id="vo-plneni-form">';
+			echo $this->app_nonce( 'save_plneni' ) . $this->app_base_field();
+			echo '<input type="hidden" name="_vo_app_action" value="save_plneni"><input type="hidden" name="dite_id" value="' . $dite_id . '"><input type="hidden" name="odborka_id" value="' . $odborka_id . '">';
+			$sestka_vedouci_ids = $wpdb->get_col( $wpdb->prepare(
+				"SELECT user_id FROM {$wpdb->prefix}vo_vedouci WHERE sestka_id=%d", $d->sestka_id
+			) ) ?: [];
+			$wp_users = $sestka_vedouci_ids
+				? get_users( [ 'include' => $sestka_vedouci_ids, 'orderby' => 'display_name', 'fields' => [ 'ID', 'display_name' ] ] )
+				: get_users( [ 'orderby' => 'display_name', 'fields' => [ 'ID', 'display_name' ] ] );
 
 			// Hromadné zadání
 			$users_opts = '';
