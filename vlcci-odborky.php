@@ -1896,6 +1896,20 @@ class VlcciOdborky {
 				? get_users( [ 'include' => $sestka_vedouci_ids, 'orderby' => 'display_name', 'fields' => [ 'ID', 'display_name' ] ] )
 				: get_users( [ 'orderby' => 'display_name', 'fields' => [ 'ID', 'display_name' ] ] );
 
+			// Přidělit bez data — zobrazit nahoře jen pokud ještě nic není
+			if ( $p['done'] === 0 ) {
+				echo '<div class="voa-extra-actions voa-extra-actions--top">';
+				echo '<form method="post">';
+				echo $this->app_nonce( 'pridat_bez_data' ) . $this->app_base_field();
+				echo '<input type="hidden" name="_vo_app_action" value="pridat_bez_data">';
+				echo '<input type="hidden" name="dite_id" value="' . $dite_id . '">';
+				echo '<input type="hidden" name="odborka_id" value="' . $odborka_id . '">';
+				echo '<label class="voa-checkbox-label"><input type="checkbox" id="vo-bez-data-check" onchange="document.getElementById(\'vo-bez-data-btn\').disabled=!this.checked"> Přidělit bez uvedení data — má ji z dřívějška</label>';
+				echo '<button type="submit" id="vo-bez-data-btn" class="voa-btn voa-btn-secondary" disabled onclick="return confirm(\'Přidělit odborku ' . esc_js( $odborka->nazev ) . ' pro ' . esc_js( $d->prezdivka ) . ' bez data?\')">✅ Přidělit odborku</button>';
+				echo '</form>';
+				echo '</div>';
+			}
+
 			// Hromadné zadání
 			$users_opts = '';
 			foreach ( $wp_users as $wu ) {
@@ -1975,16 +1989,6 @@ class VlcciOdborky {
 		if ( $can_edit ) {
 			echo '<div class="voa-form-actions"><button type="submit" class="voa-btn voa-btn-primary">Uložit plnění</button></div></form>';
 			echo '<div class="voa-extra-actions">';
-			if ( $p['done'] === 0 ) {
-				echo '<form method="post">';
-				echo $this->app_nonce( 'pridat_bez_data' ) . $this->app_base_field();
-				echo '<input type="hidden" name="_vo_app_action" value="pridat_bez_data">';
-				echo '<input type="hidden" name="dite_id" value="' . $dite_id . '">';
-				echo '<input type="hidden" name="odborka_id" value="' . $odborka_id . '">';
-				echo '<label class="voa-checkbox-label"><input type="checkbox" id="vo-bez-data-check" onchange="document.getElementById(\'vo-bez-data-btn\').disabled=!this.checked"> Přidělit bez uvedení data — má ji z dřívějška</label>';
-				echo '<button type="submit" id="vo-bez-data-btn" class="voa-btn voa-btn-secondary" disabled onclick="return confirm(\'Přidělit odborku ' . esc_js( $odborka->nazev ) . ' pro ' . esc_js( $d->prezdivka ) . ' bez data?\')">✅ Přidělit odborku</button>';
-				echo '</form>';
-			}
 			if ( $p['done'] > 0 ) {
 				echo '<form method="post">';
 				echo $this->app_nonce( 'delete_plneni_odborka' ) . $this->app_base_field();
@@ -2457,6 +2461,7 @@ class VlcciOdborky {
 .voa-btn-primary{background:#1a5c2a;color:#fff!important}
 .voa-btn-danger{background:#c0392b;color:#fff!important;border-color:#a93226}
 .voa-extra-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid #e0e0e0}
+.voa-extra-actions--top{margin-top:0;padding-top:0;border-top:none;margin-bottom:12px}
 .voa-extra-actions form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .voa-checkbox-label{font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px}
 .voa-ukol-datum--bezdata{font-style:italic;color:#888}
