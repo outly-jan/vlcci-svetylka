@@ -2235,20 +2235,29 @@ class VlcciOdborky {
 			) ) ?: [];
 			if ( empty( $deti ) ) continue;
 			usort( $deti, fn($a,$b) => $this->progress( (int)$b->id, (int)$o->id )['done'] <=> $this->progress( (int)$a->id, (int)$o->id )['done'] );
-			echo '<div class="voa-card" style="margin-bottom:16px"><div class="voa-card-head">';
-			echo '<a href="' . esc_url( $this->app_url( 'po_odborkach', [ 'odborka_id' => $o->id ] ) ) . '" class="voa-card-head-link">';
-			if ( $o->obrazek ) echo '<img src="' . esc_url( $this->img_url( $o->obrazek ) ) . '" style="width:36px;height:36px;object-fit:contain" alt="">';
-			echo '<h3 style="margin:0">' . esc_html( $o->nazev ) . '</h3></a><span class="voa-muted">' . count( $deti ) . ' dětí plní</span></div>';
-			echo '<div class="voa-children-progress">';
+			echo '<div class="voa-po-odb-block">';
+			echo '<div class="voa-po-odb-heading">';
+			echo '<a href="' . esc_url( $this->app_url( 'po_odborkach', [ 'odborka_id' => $o->id ] ) ) . '" class="voa-po-odb-title">';
+			if ( $o->obrazek ) echo '<img src="' . esc_url( $this->img_url( $o->obrazek ) ) . '" class="voa-po-odb-img" alt="">';
+			echo esc_html( $o->nazev ) . '</a>';
+			echo '<span class="voa-muted" style="font-size:12px">' . count( $deti ) . ' dětí</span>';
+			echo '</div>';
+			echo '<div class="voa-children-grid">';
 			foreach ( $deti as $d ) {
 				$p   = $this->progress( (int)$d->id, (int)$o->id );
 				$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
-				echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'dite_id' => $d->id, 'odborka_id' => $o->id ] ) ) . '" class="voa-progress-row">';
-				echo '<span class="voa-progress-name"><strong>' . esc_html( $d->prezdivka ) . '</strong> <span class="voa-muted">' . esc_html( $d->prijmeni ) . '</span></span>';
-				echo '<div class="voa-progress-bar-wrap voa-progress-bar-wrap--md"><div class="voa-progress-bar-fill ' . ( $p['splneno'] ? 'voa-progress-bar-fill--green' : 'voa-progress-bar-fill--orange' ) . '" style="width:' . $pct . '%"></div></div>';
-				if ( $p['splneno'] ) echo '<span class="voa-green" style="font-size:12px;font-weight:700;white-space:nowrap">✓ Splněno</span>';
-				else echo '<span style="font-size:12px;white-space:nowrap">' . $p['done'] . '/' . $p['total'] . '</span>';
-				echo '</a>';
+				$cls = $p['splneno'] ? ' voa-child-card--done' : '';
+				echo '<a href="' . esc_url( $this->app_url( 'plneni', [ 'dite_id' => $d->id, 'odborka_id' => $o->id ] ) ) . '" class="voa-child-card' . $cls . '">';
+				echo '<div class="voa-child-nickname">' . esc_html( $d->prezdivka ) . '</div>';
+				echo '<div class="voa-child-name">' . esc_html( $d->jmeno . ' ' . $d->prijmeni ) . '</div>';
+				echo '<div class="voa-child-stats" style="margin-top:6px">';
+				if ( $p['splneno'] ) {
+					echo '<span class="voa-badge-count voa-badge-count--green">✓ Splněno</span>';
+				} else {
+					echo '<div class="voa-progress-bar-wrap" style="width:100%;margin-bottom:3px"><div class="voa-progress-bar-fill voa-progress-bar-fill--orange" style="width:' . $pct . '%"></div></div>';
+					echo '<span class="voa-muted" style="font-size:11px">' . $p['done'] . ' / ' . $p['total'] . ' úkolů</span>';
+				}
+				echo '</div></a>';
 			}
 			echo '</div></div>';
 		}
@@ -2611,6 +2620,12 @@ class VlcciOdborky {
 /* Children grid */
 .voa-children-grid{display:flex;flex-wrap:wrap;gap:8px;padding:4px 0}
 .voa-child-card{background:#fff;border:1px solid #ddd;border-radius:4px;padding:12px 14px;min-width:130px;max-width:180px;flex:0 1 160px;text-decoration:none;color:#333;transition:border-color .15s,box-shadow .15s;display:block}
+.voa-child-card--done{border-color:#1a5c2a;background:#f4fbf6}
+.voa-po-odb-block{margin-bottom:24px}
+.voa-po-odb-heading{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid #e0eee2}
+.voa-po-odb-title{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:#1a5c2a;text-decoration:none;flex:1}
+.voa-po-odb-title:hover{text-decoration:underline}
+.voa-po-odb-img{width:28px;height:28px;object-fit:contain}
 .voa-child-card:hover{border-color:#1a5c2a;box-shadow:0 2px 6px rgba(0,0,0,.07)}
 .voa-child-nickname{font-weight:700;font-size:14px;color:#1a5c2a}
 .voa-child-name{font-size:12px;color:#666;margin:2px 0 6px}
