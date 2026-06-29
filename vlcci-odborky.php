@@ -2302,24 +2302,14 @@ class VlcciOdborky {
 			echo '<div class="voa-empty">Žádné odborky zatím nejsou.</div>';
 			return;
 		}
-		$skupiny = [];
+		echo '<div class="voa-children-grid">';
 		foreach ( $odborky as $o ) {
-			$skupiny[ $o->typ ][] = $o;
+			echo '<a href="' . esc_url( $this->app_url( 'ukoly', [ 'odborka_id' => $o->id ] ) ) . '" class="voa-child-card">';
+			if ( $o->obrazek ) echo '<img src="' . esc_url( $this->img_url( $o->obrazek ) ) . '" style="width:48px;height:48px;object-fit:contain;display:block;margin:0 auto 8px" alt="">';
+			echo '<div class="voa-child-nickname">' . esc_html( $o->nazev ) . '</div>';
+			echo '</a>';
 		}
-		$typ_labels = [ 'vlcata' => 'Vlčata', 'svetlusky' => 'Světlušky', 'oba' => 'Společné' ];
-		foreach ( $skupiny as $typ => $seznam ) {
-			echo '<h2 class="voa-section-title">' . esc_html( $typ_labels[ $typ ] ?? $typ ) . '</h2>';
-			echo '<div class="voa-children-grid">';
-			foreach ( $seznam as $o ) {
-				$pocet = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_ukoly WHERE odborka_id=%d", $o->id ) );
-				echo '<a href="' . esc_url( $this->app_url( 'ukoly', [ 'odborka_id' => $o->id ] ) ) . '" class="voa-child-card">';
-				if ( $o->obrazek ) echo '<img src="' . esc_url( $this->img_url( $o->obrazek ) ) . '" style="width:48px;height:48px;object-fit:contain;display:block;margin:0 auto 8px" alt="">';
-				echo '<div class="voa-child-nickname">' . esc_html( $o->nazev ) . '</div>';
-				echo '<div class="voa-muted" style="font-size:12px;margin-top:4px">' . $pocet . ' úkolů</div>';
-				echo '</a>';
-			}
-			echo '</div>';
-		}
+		echo '</div>';
 	}
 
 	private function app_page_deti(): void {
