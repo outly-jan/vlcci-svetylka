@@ -1901,8 +1901,8 @@ class VlcciOdborky {
 				echo '<input type="hidden" name="_vo_app_action" value="pridat_bez_data">';
 				echo '<input type="hidden" name="dite_id" value="' . $dite_id . '">';
 				echo '<input type="hidden" name="odborka_id" value="' . $odborka_id . '">';
-				echo '<label class="voa-checkbox-label"><input type="checkbox" id="vo-bez-data-check" onchange="document.getElementById(\'vo-bez-data-btn\').disabled=!this.checked"> Přidělit bez uvedení data — má ji z dřívějška</label>';
-				echo '<button type="submit" id="vo-bez-data-btn" class="voa-btn voa-btn-secondary" disabled onclick="return confirm(\'Přidělit odborku ' . esc_js( $odborka->nazev ) . ' pro ' . esc_js( $d->prezdivka ) . ' bez data?\')">✅ Přidělit bez dat</button>';
+				echo '<label class="voa-checkbox-label"><input type="checkbox" id="vo-bez-data-check"> Přidělit bez uvedení data — má ji z dřívějška</label>';
+				echo '<button type="submit" id="vo-bez-data-btn" class="voa-btn voa-btn-secondary" onclick="if(!document.getElementById(\'vo-bez-data-check\').checked){alert(\'Napřed zaškrtni Přidělit bez uvedení data.\');return false;}return confirm(\'Přidělit odborku ' . esc_js( $odborka->nazev ) . ' pro ' . esc_js( $d->prezdivka ) . ' bez data?\')">✅ Přidělit bez dat</button>';
 				echo '</form>';
 				echo '</div>';
 			}
