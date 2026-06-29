@@ -1846,16 +1846,61 @@ class VlcciOdborky {
 		echo '</span></div></div></div>';
 
 		if ( $can_edit ) {
-			echo '<form method="post" class="voa-form">';
+			echo '<form method="post" class="voa-form" id="vo-plneni-form">';
 			echo $this->app_nonce( 'save_plneni' ) . $this->app_base_field();
 			echo '<input type="hidden" name="_vo_app_action" value="save_plneni"><input type="hidden" name="dite_id" value="' . $dite_id . '"><input type="hidden" name="odborka_id" value="' . $odborka_id . '">';
 			$wp_users = get_users( [ 'orderby' => 'display_name', 'fields' => [ 'ID', 'display_name' ] ] );
+
+			// Hromadné zadání
+			$users_opts = '';
+			foreach ( $wp_users as $wu ) {
+				$sel = (int)$wu->ID === get_current_user_id() ? ' selected' : '';
+				$users_opts .= '<option value="' . (int)$wu->ID . '"' . $sel . '>' . esc_html( $wu->display_name ) . '</option>';
+			}
+			echo '<div class="voa-bulk-panel" id="vo-bulk-panel">';
+			echo '<div class="voa-bulk-toggle"><button type="button" class="voa-btn voa-btn-secondary" id="vo-bulk-btn">📅 Hromadné vyplnění</button></div>';
+			echo '<div class="voa-bulk-body" id="vo-bulk-body" style="display:none">';
+			echo '<div class="voa-bulk-row">';
+			echo '<label class="voa-bulk-label">Datum <input type="date" id="vo-bulk-date" class="voa-input-date"></label>';
+			echo '<label class="voa-bulk-label">Uznal/a <select id="vo-bulk-vedouci" class="voa-input-vedouci">' . $users_opts . '</select></label>';
+			echo '<button type="button" class="voa-btn voa-btn-primary" id="vo-bulk-apply">Použít na označené</button>';
+			echo '</div>';
+			echo '<div class="voa-bulk-checks" style="margin-top:8px">';
+			echo '<label class="voa-bulk-check-all"><input type="checkbox" id="vo-bulk-all"> <strong>Označit všechny nesplněné</strong></label>';
+			echo '</div></div></div>';
+			echo '<script>
+(function(){
+  var btn=document.getElementById(\'vo-bulk-btn\');
+  var body=document.getElementById(\'vo-bulk-body\');
+  btn.addEventListener(\'click\',function(){body.style.display=body.style.display===\'none\'?\'\':\'none\';});
+  document.getElementById(\'vo-bulk-all\').addEventListener(\'change\',function(){
+    document.querySelectorAll(\'.vo-ukol-check\').forEach(function(cb){
+      if(!cb.dataset.done||cb.dataset.done===\'0\') cb.checked=this.checked;
+    }.bind(this));
+  });
+  document.getElementById(\'vo-bulk-apply\').addEventListener(\'click\',function(){
+    var d=document.getElementById(\'vo-bulk-date\').value;
+    var v=document.getElementById(\'vo-bulk-vedouci\').value;
+    if(!d){alert(\'Zadej datum.\');return;}
+    document.querySelectorAll(\'.vo-ukol-check:checked\').forEach(function(cb){
+      var id=cb.dataset.ukol;
+      document.querySelector(\'[name="datum_\'+id+\'"]\').value=d;
+      document.querySelector(\'[name="vedouci_\'+id+\'"]\').value=v;
+    });
+    document.getElementById(\'vo-bulk-all\').checked=false;
+    document.querySelectorAll(\'.vo-ukol-check\').forEach(function(cb){cb.checked=false;});
+  });
+})();
+</script>';
 		}
 
 		echo '<div class="voa-ukoly-list">';
 		foreach ( $p['ukoly'] as $u ) {
 			$done = ! empty( $u->datum_splneni );
 			echo '<div class="voa-ukol' . ( $done ? ' voa-ukol--done' : '' ) . '">';
+			if ( $can_edit ) {
+				echo '<div class="voa-ukol-check-wrap"><input type="checkbox" class="vo-ukol-check" data-ukol="' . (int)$u->id . '" data-done="' . ( $done ? '1' : '0' ) . '"></div>';
+			}
 			echo '<div class="voa-ukol-num">' . (int)$u->poradi . '</div>';
 			echo '<div class="voa-ukol-body"><div class="voa-ukol-nazev">' . esc_html( $u->nazev ) . '</div>';
 			if ( $can_edit ) {
@@ -2433,6 +2478,13 @@ class VlcciOdborky {
 .voa-ukol-datum{font-size:12px;color:#555;margin-top:4px}
 .voa-ukol-vedouci{font-size:11px;color:#888;margin-top:2px}
 .voa-input-vedouci{font-size:13px;padding:3px 6px;border:1px solid #b8d4be;border-radius:4px;background:#fff;color:#222;cursor:pointer}
+.voa-bulk-panel{margin-bottom:12px}
+.voa-bulk-body{background:#f5faf6;border:1px solid #b8d4be;border-radius:6px;padding:12px;margin-top:8px}
+.voa-bulk-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.voa-bulk-label{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:600;color:#555}
+.voa-bulk-check-all{font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px}
+.voa-ukol-check-wrap{display:flex;align-items:flex-start;padding:12px 8px 0;min-width:28px}
+.voa-ukol-check-wrap input{width:16px;height:16px;cursor:pointer;accent-color:#1a5c2a}
 /* Dashboard rows */
 .voa-sestky-list{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
 .voa-sestka-item{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f8faf8;border:1px solid #ddd;border-radius:4px;text-decoration:none;color:#333;transition:border-color .15s}
