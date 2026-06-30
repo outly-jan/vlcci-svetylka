@@ -846,8 +846,9 @@ class VlcciOdborky {
 
 		$vedouci_id = get_current_user_id();
 		foreach ( $ukoly as $u ) {
-			$datum = sanitize_text_field( $_POST[ 'datum_' . $u->id ] ?? '' );
-			$pozn  = sanitize_textarea_field( $_POST[ 'pozn_' . $u->id ] ?? '' );
+			$datum_raw = sanitize_text_field( $_POST[ 'datum_' . $u->id ] ?? '' );
+			$datum     = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $datum_raw ) ? $datum_raw : '';
+			$pozn      = sanitize_textarea_field( $_POST[ 'pozn_' . $u->id ] ?? '' );
 			if ( $datum ) {
 				$wpdb->query( $wpdb->prepare(
 					"INSERT INTO {$wpdb->prefix}vo_plneni (dite_id, ukol_id, datum_splneni, poznamka, vedouci_id)
@@ -1302,14 +1303,24 @@ class VlcciOdborky {
 		}
 		echo '</select></label><noscript><button>OK</button></noscript></form>';
 
-		$where  = $filter_sestka ? $wpdb->prepare( 'AND d.sestka_id=%d', $filter_sestka ) : '';
-		$deti   = $wpdb->get_results(
-			"SELECT d.*, s.nazev AS sestka_nazev, o.nazev AS oddil_nazev, o.typ
-			 FROM {$wpdb->prefix}vo_deti d
-			 LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id
-			 LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id
-			 WHERE d.aktivni=1 $where ORDER BY o.nazev, s.nazev, d.prijmeni, d.jmeno"
-		) ?: [];
+		if ( $filter_sestka ) {
+			$deti = $wpdb->get_results( $wpdb->prepare(
+				"SELECT d.*, s.nazev AS sestka_nazev, o.nazev AS oddil_nazev, o.typ
+				 FROM {$wpdb->prefix}vo_deti d
+				 LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id
+				 LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id
+				 WHERE d.aktivni=1 AND d.sestka_id=%d ORDER BY o.nazev, s.nazev, d.prijmeni, d.jmeno",
+				$filter_sestka
+			) ) ?: [];
+		} else {
+			$deti = $wpdb->get_results(
+				"SELECT d.*, s.nazev AS sestka_nazev, o.nazev AS oddil_nazev, o.typ
+				 FROM {$wpdb->prefix}vo_deti d
+				 LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id
+				 LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id
+				 WHERE d.aktivni=1 ORDER BY o.nazev, s.nazev, d.prijmeni, d.jmeno"
+			) ?: [];
+		}
 
 		foreach ( $deti as $d ) {
 			$odborky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE (typ='oba' OR typ=%s) ORDER BY nazev", $d->typ ) ) ?: [];
@@ -1530,7 +1541,8 @@ class VlcciOdborky {
 		$ukoly      = $wpdb->get_results( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}vo_ukoly WHERE odborka_id=%d", $odborka_id ) ) ?: [];
 		$current_uid = get_current_user_id();
 		foreach ( $ukoly as $u ) {
-			$datum      = sanitize_text_field( $_POST[ 'datum_' . $u->id ] ?? '' );
+			$datum_raw  = sanitize_text_field( $_POST[ 'datum_' . $u->id ] ?? '' );
+			$datum      = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $datum_raw ) ? $datum_raw : '';
 			$pozn       = sanitize_textarea_field( $_POST[ 'pozn_' . $u->id ] ?? '' );
 			$vid_raw    = intval( $_POST[ 'vedouci_' . $u->id ] ?? 0 );
 			$vedouci_id = $vid_raw > 0 ? $vid_raw : $current_uid;
