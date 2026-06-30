@@ -1758,9 +1758,9 @@ class VlcciOdborky {
 
 		echo '<div class="voa-help-section">';
 		echo '<h2 class="voa-help-h2">✏️ Plnění</h2>';
-		echo '<p>Zde zaznamenáváš, které úkoly dítě splnilo.</p>';
+		echo '<p>Zde zaznamenáváš, které úkoly člen splnil.</p>';
 		echo '<ol class="voa-help-steps">';
-		echo '<li>Vyber šestku / roj a klikni na dítě.</li>';
+		echo '<li>Vyber šestku / roj a klikni na člena.</li>';
 		echo '<li>Klikni na odborku, které se chceš věnovat.</li>';
 		echo '<li>U každého splněného úkolu vyplň <strong>datum</strong>, volitelně poznámku, a vyber vedoucího, který splnění uznal.</li>';
 		echo '<li>Klikni <strong>Uložit plnění</strong>. Pokud datum smažeš a uložíš, záznam se odstraní.</li>';
@@ -1768,31 +1768,31 @@ class VlcciOdborky {
 		echo '<h3 class="voa-help-h3">✏️ Vyplnit víc úkolů najednou</h3>';
 		echo '<p>Pokud chceš zadat stejné datum a vedoucího pro více úkolů najednou, klikni na tlačítko <em>Vyplnit víc úkolů najednou</em>. Zadej datum, vyber vedoucího, zaškrtni příslušné úkoly (nebo klikni <em>Označit všechny nesplněné</em>) a stiskni <em>Použít na označené</em>. Datum se propíše do vybraných políček — stále je potřeba nakonec kliknout <strong>Uložit plnění</strong>.</p>';
 		echo '<h3 class="voa-help-h3">✅ Přidělit bez dat</h3>';
-		echo '<p>Pokud dítě odborku splnilo ještě před zavedením této aplikace a nechceš dohledávat jednotlivá data, zaškrtni <em>Přidělit bez uvedení data — má ji z dřívějška</em> a klikni <em>Přidělit bez dat</em>. Všechny úkoly odborky se označí jako splněné bez data. Datum pak můžeš kdykoli doplnit ručně.</p>';
+		echo '<p>Pokud člen odborku splnil ještě před zavedením této aplikace a nechceš dohledávat jednotlivá data, zaškrtni <em>Přidělit bez uvedení data — má ji z dřívějška</em> a klikni <em>Přidělit bez dat</em>. Všechny úkoly odborky se označí jako splněné bez data. Datum pak můžeš kdykoli doplnit ručně.</p>';
 		echo '<h3 class="voa-help-h3">🗑 Smazat veškeré plnění odborky</h3>';
-		echo '<p>Pokud jsi omylem přidělil/a odborku špatnému dítěti, najdeš dole červené tlačítko <em>Smazat veškeré plnění odborky</em>. Zobrazí se jen tehdy, pokud je u dítěte evidován alespoň jeden splněný úkol.</p>';
+		echo '<p>Pokud jsi omylem přidělil/a odborku špatnému členovi, najdeš dole červené tlačítko <em>Smazat veškeré plnění odborky</em>. Zobrazí se jen tehdy, pokud je u člena evidován alespoň jeden splněný úkol.</p>';
 		echo '</div>';
 
 		echo '<div class="voa-help-section">';
-		echo '<h2 class="voa-help-h2">👤 Po dětech</h2>';
-		echo '<p>Přehled všech dětí seřazených podle šestky / roje. Vidíš, které odborky každé dítě plní a jak daleko je. Kliknutím na dítě se dostaneš na detail jeho plnění.</p>';
+		echo '<h2 class="voa-help-h2">👤 Po jménech</h2>';
+		echo '<p>Přehled všech členů seřazených podle šestky / roje. Vidíš, které odborky každý člen plní a jak daleko je. Kliknutím na jméno se dostaneš na detail jeho plnění.</p>';
 		echo '</div>';
 
 		echo '<div class="voa-help-section">';
 		echo '<h2 class="voa-help-h2">🏅 Po odborkách</h2>';
-		echo '<p>Přehled odborek — vidíš, které děti danou odborku plní a jak jsou daleko.</p>';
-		echo '<p>Kliknutím na název odborky se dostaneš na seznam jejích úkolů. U každého úkolu je vidět, kolik dětí ho ještě nemá splněný.</p>';
-		echo '<p>Kliknutím na konkrétní úkol zobrazíš seznam dětí, které ho <strong>nemají splněný</strong>. To se hodí třeba tehdy, když chceš vzít na výpravu děti, kterým daný úkol ještě chybí.</p>';
+		echo '<p>Přehled odborek — vidíš, kteří členové danou odborku plní a jak jsou daleko.</p>';
+		echo '<p>Kliknutím na název odborky se dostaneš na seznam jejích úkolů. U každého úkolu je vidět, kolik členů ho ještě nemá splněný.</p>';
+		echo '<p>Kliknutím na konkrétní úkol zobrazíš seznam členů, kteří ho <strong>nemají splněný</strong>. To se hodí třeba tehdy, když chceš vzít na výpravu členy, kterým daný úkol ještě chybí.</p>';
 		echo '</div>';
 
 		echo '<div class="voa-help-section">';
-		echo '<h2 class="voa-help-h2">👶 Správa dětí</h2>';
-		echo '<p>Zde spravuješ seznam dětí ve své šestce / roji.</p>';
+		echo '<h2 class="voa-help-h2">🧑‍🤝‍🧑 Správa členů</h2>';
+		echo '<p>Zde spravuješ seznam členů ve své šestce / roji.</p>';
 		echo '<ul class="voa-help-list">';
-		echo '<li><strong>Přidat dítě</strong> — vyplň jméno, příjmení a přezdívku.</li>';
-		echo '<li><strong>Upravit</strong> — klikni na <em>Upravit</em> u daného dítěte. Lze změnit jméno i přesunout dítě do jiné šestky.</li>';
-		echo '<li><strong>Aktivní / neaktivní</strong> — neaktivní děti se nezobrazují v přehledech plnění, ale jejich záznamy zůstávají zachovány.</li>';
-		echo '<li><strong>Smazat</strong> — trvale odstraní dítě i veškeré záznamy o plnění.</li>';
+		echo '<li><strong>Přidat člena</strong> — vyplň jméno, příjmení a přezdívku.</li>';
+		echo '<li><strong>Upravit</strong> — klikni na <em>Upravit</em> u daného člena. Lze změnit jméno i přesunout člena do jiné šestky.</li>';
+		echo '<li><strong>Aktivní / neaktivní</strong> — neaktivní členové se nezobrazují v přehledech plnění, ale jejich záznamy zůstávají zachovány.</li>';
+		echo '<li><strong>Smazat</strong> — trvale odstraní člena i veškeré záznamy o plnění.</li>';
 		echo '</ul>';
 		echo '</div>';
 
@@ -1800,7 +1800,7 @@ class VlcciOdborky {
 		echo '<h2 class="voa-help-h2">Časté dotazy</h2>';
 		echo '<dl class="voa-help-faq">';
 		echo '<dt>Můžu upravit datum nebo vedoucího u již splněného úkolu?</dt>';
-		echo '<dd>Ano — jednoduše přejdi do Plnění, najdi dítě a odborku a přepiš datum nebo vedoucího. Po uložení se záznamy aktualizují.</dd>';
+		echo '<dd>Ano — jednoduše přejdi do Plnění, najdi člena a odborku a přepiš datum nebo vedoucího. Po uložení se záznamy aktualizují.</dd>';
 		echo '<dt>Jak odeberu splnění jednoho konkrétního úkolu?</dt>';
 		echo '<dd>Smaž datum u daného úkolu a klikni Uložit plnění. Prázdné datum = záznam se smaže.</dd>';
 		echo '<dt>Odborka je splněná, ale já vidím jen část úkolů jako hotové — je to v pořádku?</dt>';
