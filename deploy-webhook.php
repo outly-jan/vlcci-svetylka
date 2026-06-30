@@ -3,7 +3,7 @@
 // Po nahrání na server změň CHANGE_ME na náhodný řetězec.
 define('DEPLOY_SECRET', 'CHANGE_ME');
 
-if (($_GET['token'] ?? '') !== DEPLOY_SECRET) {
+if (($_SERVER['HTTP_X_DEPLOY_TOKEN'] ?? '') !== DEPLOY_SECRET) {
     http_response_code(403);
     exit('Unauthorized');
 }
