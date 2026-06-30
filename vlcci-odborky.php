@@ -2329,6 +2329,9 @@ class VlcciOdborky {
 	private function app_page_deti(): void {
 		global $wpdb;
 		$my_sestky  = $this->my_sestky();
+		$all_sestky = $this->is_admin()
+			? $wpdb->get_results( "SELECT s.*, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_sestky s LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id ORDER BY o.nazev, s.nazev" ) ?: []
+			: $my_sestky;
 		$sestka_id  = intval( $_GET['sestka_id'] ?? ( $my_sestky[0]->id ?? 0 ) );
 		$edit_id    = intval( $_GET['edit_id'] ?? 0 );
 		$edit_d     = $edit_id ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE id=%d", $edit_id ) ) : null;
