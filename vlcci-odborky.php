@@ -1720,10 +1720,10 @@ class VlcciOdborky {
 		$items = [
 			'dashboard'    => '🏠 Přehled',
 			'plneni'       => '✏️ Plnění',
-			'po_detech'    => '👤 Po dětech',
+			'po_detech'    => '👤 Po jménech',
 			'po_odborkach' => '🏅 Po odborkách',
 			'ukoly'        => '📋 Úkoly',
-			'deti'         => '👶 Správa dětí',
+			'deti'         => '🧑‍🤝‍🧑 Správa členů',
 			'napoveda'     => '❓ Nápověda',
 		];
 		if ( $this->is_admin() ) {
