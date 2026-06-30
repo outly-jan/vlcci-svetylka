@@ -2146,6 +2146,10 @@ class VlcciOdborky {
 		$odborka_id = intval( $_GET['odborka_id'] ?? 0 );
 		$ukol_id    = intval( $_GET['ukol_id'] ?? 0 );
 
+		$my_sestky  = $this->my_sestky();
+		$my_ids     = array_map( fn($s) => (int)$s->id, $my_sestky );
+		$sestka_sql = $my_ids ? 'AND d.sestka_id IN (' . implode( ',', $my_ids ) . ')' : 'AND 1=0';
+
 		// === Úroveň 3: detail úkolu — kdo ho nemá splněný ===
 		if ( $odborka_id && $ukol_id ) {
 			$odborka = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE id=%d", $odborka_id ) );
@@ -2153,30 +2157,31 @@ class VlcciOdborky {
 			if ( ! $odborka || ! $ukol ) { echo '<div class="voa-empty">Nenalezeno.</div>'; return; }
 			echo '<a href="' . esc_url( $this->app_url( 'po_odborkach', [ 'odborka_id' => $odborka_id ] ) ) . '" class="voa-back" style="display:block;margin-bottom:16px">← ' . esc_html( $odborka->nazev ) . '</a>';
 			echo '<h1 class="voa-page-title">' . esc_html( $ukol->nazev ) . '</h1>';
-			echo '<p class="voa-muted" style="margin-bottom:16px">Děti, které tento úkol nemají splněný</p>';
-			$deti_chybi = $wpdb->get_results( $wpdb->prepare(
-				"SELECT d.*, s.nazev AS sestka_nazev FROM {$wpdb->prefix}vo_deti d
-				 LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id
-				 WHERE d.aktivni=1
-				   AND (d.typ=%s OR d.typ IS NULL OR d.typ='')
-				   AND d.id NOT IN (
-				       SELECT dite_id FROM {$wpdb->prefix}vo_plneni
-				       WHERE ukol_id=%d AND datum_splneni IS NOT NULL AND datum_splneni != \'\'
-				   )
-				 ORDER BY s.nazev, d.prijmeni, d.jmeno",
-				$odborka->typ === 'oba' ? 'vlci' : $odborka->typ, $ukol_id
-			) ) ?: [];
+			echo '<p class="voa-muted" style="margin-bottom:16px">Členové, kteří tento úkol nemají splněný</p>';
 			if ( $odborka->typ === 'oba' ) {
 				$deti_chybi = $wpdb->get_results( $wpdb->prepare(
 					"SELECT d.*, s.nazev AS sestka_nazev FROM {$wpdb->prefix}vo_deti d
 					 LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id
-					 WHERE d.aktivni=1
+					 WHERE d.aktivni=1 $sestka_sql
 					   AND d.id NOT IN (
 					       SELECT dite_id FROM {$wpdb->prefix}vo_plneni
 					       WHERE ukol_id=%d AND datum_splneni IS NOT NULL AND datum_splneni != \'\'
 					   )
 					 ORDER BY s.nazev, d.prijmeni, d.jmeno",
 					$ukol_id
+				) ) ?: [];
+			} else {
+				$deti_chybi = $wpdb->get_results( $wpdb->prepare(
+					"SELECT d.*, s.nazev AS sestka_nazev FROM {$wpdb->prefix}vo_deti d
+					 LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id
+					 WHERE d.aktivni=1 $sestka_sql
+					   AND (d.typ=%s OR d.typ IS NULL OR d.typ='')
+					   AND d.id NOT IN (
+					       SELECT dite_id FROM {$wpdb->prefix}vo_plneni
+					       WHERE ukol_id=%d AND datum_splneni IS NOT NULL AND datum_splneni != \'\'
+					   )
+					 ORDER BY s.nazev, d.prijmeni, d.jmeno",
+					$odborka->typ, $ukol_id
 				) ) ?: [];
 			}
 			if ( empty( $deti_chybi ) ) {
@@ -2215,17 +2220,19 @@ class VlcciOdborky {
 			$ukoly = $wpdb->get_results( $wpdb->prepare(
 				"SELECT * FROM {$wpdb->prefix}vo_ukoly WHERE odborka_id=%d ORDER BY poradi", $odborka_id
 			) ) ?: [];
-			$celkem_aktivnich = (int) $wpdb->get_var( $wpdb->prepare(
-				$odborka->typ === 'oba'
-					? "SELECT COUNT(*) FROM {$wpdb->prefix}vo_deti WHERE aktivni=1"
-					: "SELECT COUNT(*) FROM {$wpdb->prefix}vo_deti WHERE aktivni=1 AND typ=%s",
-				$odborka->typ
-			) );
+			if ( $odborka->typ === 'oba' ) {
+				$celkem_aktivnich = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_deti WHERE aktivni=1 $sestka_sql" );
+			} else {
+				$celkem_aktivnich = (int) $wpdb->get_var( $wpdb->prepare(
+					"SELECT COUNT(*) FROM {$wpdb->prefix}vo_deti WHERE aktivni=1 AND typ=%s $sestka_sql", $odborka->typ
+				) );
+			}
 			echo '<div class="voa-card"><div class="voa-ukoly-list">';
 			foreach ( $ukoly as $u ) {
 				$splneno_count = (int) $wpdb->get_var( $wpdb->prepare(
-					"SELECT COUNT(DISTINCT dite_id) FROM {$wpdb->prefix}vo_plneni
-					 WHERE ukol_id=%d AND datum_splneni IS NOT NULL AND datum_splneni != \'\'", $u->id
+					"SELECT COUNT(DISTINCT p.dite_id) FROM {$wpdb->prefix}vo_plneni p
+					 JOIN {$wpdb->prefix}vo_deti d ON d.id=p.dite_id
+					 WHERE p.ukol_id=%d AND p.datum_splneni IS NOT NULL AND p.datum_splneni != \'\' $sestka_sql", $u->id
 				) );
 				$chybi = $celkem_aktivnich - $splneno_count;
 				echo '<a href="' . esc_url( $this->app_url( 'po_odborkach', [ 'odborka_id' => $odborka_id, 'ukol_id' => $u->id ] ) ) . '" class="voa-ukol voa-ukol-link">';
@@ -2247,7 +2254,7 @@ class VlcciOdborky {
 			$deti = $wpdb->get_results( $wpdb->prepare(
 				"SELECT DISTINCT d.*, s.nazev AS sestka_nazev, s.id AS sestka_id FROM {$wpdb->prefix}vo_deti d
 				 JOIN {$wpdb->prefix}vo_plneni p ON p.dite_id=d.id JOIN {$wpdb->prefix}vo_ukoly u ON u.id=p.ukol_id AND u.odborka_id=%d
-				 JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id WHERE d.aktivni=1 ORDER BY d.prijmeni, d.jmeno", $o->id
+				 JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id WHERE d.aktivni=1 $sestka_sql ORDER BY d.prijmeni, d.jmeno", $o->id
 			) ) ?: [];
 			if ( empty( $deti ) ) continue;
 			usort( $deti, fn($a,$b) => $this->progress( (int)$b->id, (int)$o->id )['done'] <=> $this->progress( (int)$a->id, (int)$o->id )['done'] );
