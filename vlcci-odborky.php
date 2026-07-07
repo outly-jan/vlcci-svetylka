@@ -20,6 +20,23 @@ class VlcciOdborky {
 		add_shortcode( 'vlcci_prehled', [ $this, 'shortcode_prehled' ] );
 		add_action( 'template_redirect',  [ $this, 'handle_app_post' ] );
 		add_shortcode( 'vlcci_app',       [ $this, 'shortcode_app' ] );
+		add_action( 'init',              [ $this, 'maybe_migrate' ] );
+	}
+
+	public function maybe_migrate(): void {
+		if ( get_option( 'vo_migration_poradi_v1' ) ) return;
+		global $wpdb;
+		$odborky = $wpdb->get_results( "SELECT id FROM {$wpdb->prefix}vo_odborky ORDER BY id" );
+		foreach ( $odborky as $o ) {
+			$ukoly = $wpdb->get_results( $wpdb->prepare(
+				"SELECT id FROM {$wpdb->prefix}vo_ukoly WHERE odborka_id=%d ORDER BY id",
+				$o->id
+			) );
+			foreach ( $ukoly as $i => $u ) {
+				$wpdb->update( "{$wpdb->prefix}vo_ukoly", [ 'poradi' => $i + 1 ], [ 'id' => $u->id ] );
+			}
+		}
+		update_option( 'vo_migration_poradi_v1', '1' );
 	}
 
 	// ── ACTIVATION / DB ──────────────────────────────────────────────────────
