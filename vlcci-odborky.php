@@ -27,6 +27,23 @@ class VlcciOdborky {
 		$this->migrate_poradi_v1();
 		$this->migrate_nove_odborky_v2();
 		$this->migrate_obrazky_v3();
+		$this->migrate_obrazky_v4();
+	}
+
+	private function migrate_obrazky_v4(): void {
+		if ( get_option( 'vo_migration_obrazky_v4' ) ) return;
+		global $wpdb;
+		$obrazky = [
+			'Ježíšův učedník'              => 'jezisuvucednik.png',
+			'Průvodce křesťanskou kulturou' => 'pruvodce-krestanskou-kulturou.png',
+		];
+		foreach ( $obrazky as $nazev => $soubor ) {
+			$wpdb->query( $wpdb->prepare(
+				"UPDATE {$wpdb->prefix}vo_odborky SET obrazek=%s WHERE nazev=%s",
+				$soubor, $nazev
+			) );
+		}
+		update_option( 'vo_migration_obrazky_v4', '1' );
 	}
 
 	private function migrate_obrazky_v3(): void {
@@ -37,11 +54,10 @@ class VlcciOdborky {
 			'Průvodce křesťanskou kulturou' => 'pruvodce-krestanskou-kulturou.png',
 		];
 		foreach ( $obrazky as $nazev => $soubor ) {
-			$wpdb->update(
-				"{$wpdb->prefix}vo_odborky",
-				[ 'obrazek' => $soubor ],
-				[ 'nazev' => $nazev, 'obrazek' => null ]
-			);
+			$wpdb->query( $wpdb->prepare(
+				"UPDATE {$wpdb->prefix}vo_odborky SET obrazek=%s WHERE nazev=%s AND (obrazek IS NULL OR obrazek='')",
+				$soubor, $nazev
+			) );
 		}
 		update_option( 'vo_migration_obrazky_v3', '1' );
 	}
