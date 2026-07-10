@@ -47,6 +47,10 @@ class VlcciOdborky {
 	private function migrate_nove_odborky_v2(): void {
 		if ( get_option( 'vo_migration_nove_odborky_v2' ) ) return;
 		global $wpdb;
+		$nove_obrazky = [
+			'Ježíšův učedník'              => 'jezisuvucednik.png',
+			'Průvodce křesťanskou kulturou' => 'pruvodce-krestanskou-kulturou.png',
+		];
 		$nove = [
 			[ 'Ježíšův učedník', [
 				'Vzor. Vyberu si někoho z rodiny, přátel nebo známých (z minulosti nebo současnosti), kdo podle mě žije nebo žil podobně jako Ježíš, a řeknu vedoucímu, v čem se mu podobá. (Tímto úkolem si splníš i úkol Moji předkové ze stezky 3. stupně.)',
@@ -82,7 +86,7 @@ class VlcciOdborky {
 				'nazev'     => $nazev,
 				'typ'       => 'oba',
 				'min_ukolu' => 8,
-				'obrazek'   => null,
+				'obrazek'   => $nove_obrazky[ $nazev ] ?? null,
 			] );
 			$oid = $wpdb->insert_id;
 			foreach ( $ukoly as $i => $u ) {
@@ -591,8 +595,10 @@ class VlcciOdborky {
 			'Vodák'              => 'vodak.png',
 			'Výtvarník'          => 'vytvarnik.png',
 			'Zahradník'          => 'zahradnik.png',
-			'Zdravotník'         => 'zdravotnik.jpg',
-			'Zpěvák'             => 'zpevak.png',
+			'Zdravotník'                  => 'zdravotnik.jpg',
+			'Zpěvák'                      => 'zpevak.png',
+			'Ježíšův učedník'             => 'jezisuvucednik.png',
+			'Průvodce křesťanskou kulturou' => 'pruvodce-krestanskou-kulturou.png',
 		];
 
 		foreach ( $odborky as $row ) {
