@@ -26,6 +26,24 @@ class VlcciOdborky {
 	public function maybe_migrate(): void {
 		$this->migrate_poradi_v1();
 		$this->migrate_nove_odborky_v2();
+		$this->migrate_obrazky_v3();
+	}
+
+	private function migrate_obrazky_v3(): void {
+		if ( get_option( 'vo_migration_obrazky_v3' ) ) return;
+		global $wpdb;
+		$obrazky = [
+			'Ježíšův učedník'              => 'jezisuvucednik.png',
+			'Průvodce křesťanskou kulturou' => 'pruvodce-krestanskou-kulturou.png',
+		];
+		foreach ( $obrazky as $nazev => $soubor ) {
+			$wpdb->update(
+				"{$wpdb->prefix}vo_odborky",
+				[ 'obrazek' => $soubor ],
+				[ 'nazev' => $nazev, 'obrazek' => null ]
+			);
+		}
+		update_option( 'vo_migration_obrazky_v3', '1' );
 	}
 
 	private function migrate_poradi_v1(): void {
