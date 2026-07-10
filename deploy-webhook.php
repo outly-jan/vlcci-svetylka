@@ -35,6 +35,7 @@ $images = [
     'reporter.png', 'rukodelkar.png', 'sberatel.png', 'sportovec.jpg',
     'tabornik.png', 'vodak.png', 'vytvarnik.png', 'zahradnik.png',
     'zdravotnik.jpg', 'zpevak.png',
+    'jezisuvucednik.png', 'pruvodce-krestanskou-kulturou.png',
 ];
 
 if (!is_dir(__DIR__ . '/images')) {
