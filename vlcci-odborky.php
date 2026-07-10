@@ -24,6 +24,11 @@ class VlcciOdborky {
 	}
 
 	public function maybe_migrate(): void {
+		$this->migrate_poradi_v1();
+		$this->migrate_nove_odborky_v2();
+	}
+
+	private function migrate_poradi_v1(): void {
 		if ( get_option( 'vo_migration_poradi_v1' ) ) return;
 		global $wpdb;
 		$odborky = $wpdb->get_results( "SELECT id FROM {$wpdb->prefix}vo_odborky ORDER BY id" );
@@ -37,6 +42,58 @@ class VlcciOdborky {
 			}
 		}
 		update_option( 'vo_migration_poradi_v1', '1' );
+	}
+
+	private function migrate_nove_odborky_v2(): void {
+		if ( get_option( 'vo_migration_nove_odborky_v2' ) ) return;
+		global $wpdb;
+		$nove = [
+			[ 'Ježíšův učedník', [
+				'Vzor. Vyberu si někoho z rodiny, přátel nebo známých (z minulosti nebo současnosti), kdo podle mě žije nebo žil podobně jako Ježíš, a řeknu vedoucímu, v čem se mu podobá. (Tímto úkolem si splníš i úkol Moji předkové ze stezky 3. stupně.)',
+				'Úryvek z Písma. Vezmu si úryvek z Bible o Ježíši a spolu s kamarádem ho ztvárním pomocí krátké scénky. Budu si všímat toho, co mohly jednotlivé osoby prožívat.',
+				'Ježíšův život. Zkusím nakreslit, odvyprávět nebo jinak ztvárnil 5 momentů ze života Ježíše Nazaretského, které mě zaujaly. Tyto výjevy seřadím podle času, kdy se udály.',
+				'Význam Ježíše. Řeknu vedoucímu nebo šestce, proč je podle mě Ježíš důležitý pro svět. Co to znamená, že nás zachránil a má nás rád.',
+				'Modlitba za druhé. Pomodlím se za lidi, kteří nejsou moji blízcí kamarádi. Potom svoji zkušenost sdělím někomu, komu důvěřuji.',
+				'Podobenství. Společně se šestkou si přečteme některé z Ježíšových podobenství (O ztracené ovci, O dělnících na vinici, O svatební hostině, O hřivnách nebo jiné) a najdeme v příběhu tři ponaučení.',
+				'Dobrý skutek. Dobrým činem udělám radost někomu, kdo je smutný, opuštěný, nemocný či chudý. Úkol mohu splnit např. spolu s rodiči nebo účastí na dobročinné akci.',
+				'Osobní vztah s Ježíšem. Popovídám si s vedoucím nebo s někým, komu důvěřuji, o tom, čím dělám Ježíši radost, a čím ne.',
+				'Pravidelná modlitba. Pravidelně se snažím modlit, děkovat za to, co v životě mám, a z přírodních materiálů vyrobím něco, za co děkuji.',
+				'Život s Ježíšem. Vybavím si situaci či událost ze svého života. Nakreslím obrázek o tom, jak proběhla, a obrázek, jak by proběhla, kdyby Ježíš nebyl v mém životě. Spolu s vedoucím je porovnám.',
+			] ],
+			[ 'Průvodce křesťanskou kulturou', [
+				'Křesťanství v umění. Najdu (např. v knihách, na internetu) dva obrazy (nebo dvě hudební skladby, písně, básně či dvě sochy) znázorňující události ze života Ježíše, jeho maminky Marie nebo apoštolů. Ukážu je šestce a vysvětlím, o čem jsou. (Tímto úkolem si splníš i úkol Krása ze stezky 2. stupně.)',
+				'Křesťanská kultura okolo mě. Ve svém okolí najdu dvě památky, stavby, umělecká díla nebo jiné projevy křesťanské kultury, ukážu je (příp. na fotografii) šestce a řeknu, k čemu slouží a co se mi na nich líbí.',
+				'Počátky křesťanství. Přečtu nebo si poslechnu jeden z biblických příběhů o počátcích církve (Marek 1. kapitola, verš 14–20; Skutky apoštolů 2. kapitola; Matouš 10. kapitola; nebo jiný vhodný text). Zeptám se na vše, čemu nerozumím.',
+				'Křesťanské symboly. Nakreslím tři ze základních symbolů křesťanství – např. kříž, ryba, kalich, beránek nebo holubice – a jejich význam popíšu šestce.',
+				'Modlitba Páně. Znám modlitbu Páně (Otčenáš) a tři její verše vysvětlím kamarádům z šestky.',
+				'Směry křesťanství. Zjistím, co mají společného a čím se liší základní směry křesťanství (katolíci, pravoslavní, protestanti), co jsem zjistil/a, představím svému vedoucímu.',
+				'Bohoslužby v různých církvích. Sám nebo s někým blízkým navštívím bohoslužby nebo online bohoslužby dvou různých církví. A řeknu, v čem se liší, nebo se podělím o něco, čeho jsem si všiml/a.',
+				'Křesťanství ve světě. Na mapě Evropy, kterou si připravím (hrubě nakreslím nebo vytisknu), vyznačím (např. vybarvením) převládající směry křesťanského náboženství. Vyznačím dvě místa důležitá pro křesťanství a ukážu mapu šestce.',
+				'Patroni skautů. Vyberu si jednoho ze skautských patronů (sv. Alžběta Durynská, sv. František, sv. Anežka, sv. apoštol Pavel, sv. Jiří) nebo některého významného křesťanského myslitele (např. J. A. Komenský, M. Luther) a nakreslím obrázek s věcmi pro něj typickými. Své dílo ukážu šestce a popíšu vlastnosti dané osoby.',
+				'Velikonoce. Pomocí krátké scénky vysvětlím šestce jednotlivé dny velikonočních svátků (Zelený čtvrtek, Velký pátek, Bílá sobota, Velikonoční neděle). Zaměřím se hlavně na příběh Ježíše v oněch dnech.',
+			] ],
+		];
+		foreach ( $nove as [ $nazev, $ukoly ] ) {
+			$exists = $wpdb->get_var( $wpdb->prepare(
+				"SELECT id FROM {$wpdb->prefix}vo_odborky WHERE nazev=%s", $nazev
+			) );
+			if ( $exists ) continue;
+			$wpdb->insert( "{$wpdb->prefix}vo_odborky", [
+				'nazev'     => $nazev,
+				'typ'       => 'oba',
+				'min_ukolu' => 8,
+				'obrazek'   => null,
+			] );
+			$oid = $wpdb->insert_id;
+			foreach ( $ukoly as $i => $u ) {
+				$wpdb->insert( "{$wpdb->prefix}vo_ukoly", [
+					'odborka_id' => $oid,
+					'poradi'     => $i + 1,
+					'nazev'      => $u,
+				] );
+			}
+		}
+		update_option( 'vo_migration_nove_odborky_v2', '1' );
 	}
 
 	// ── ACTIVATION / DB ──────────────────────────────────────────────────────
@@ -478,6 +535,30 @@ class VlcciOdborky {
 				'Fair play. Vysvětlím šestce, proč je důležité u her nepodvádět a umět i prohrávat. Při hraní se nehádám ani nevztekám, aby si hru užili i ostatní.',
 				'Tradiční hry. Zahraju si jednu hru na šachové hrací desce a jednu hru s kartami (např. prší, kvarteto, černý petr).',
 				'Vlastní hra. Vytvořím sám/sama nebo se šestkou vlastní hru (namalujeme plán a vymyslíme pravidla). Hru si zahrajeme.',
+			] ],
+			[ 'Ježíšův učedník', [
+				'Vzor. Vyberu si někoho z rodiny, přátel nebo známých (z minulosti nebo současnosti), kdo podle mě žije nebo žil podobně jako Ježíš, a řeknu vedoucímu, v čem se mu podobá. (Tímto úkolem si splníš i úkol Moji předkové ze stezky 3. stupně.)',
+				'Úryvek z Písma. Vezmu si úryvek z Bible o Ježíši a spolu s kamarádem ho ztvárním pomocí krátké scénky. Budu si všímat toho, co mohly jednotlivé osoby prožívat.',
+				'Ježíšův život. Zkusím nakreslit, odvyprávět nebo jinak ztvárnil 5 momentů ze života Ježíše Nazaretského, které mě zaujaly. Tyto výjevy seřadím podle času, kdy se udály.',
+				'Význam Ježíše. Řeknu vedoucímu nebo šestce, proč je podle mě Ježíš důležitý pro svět. Co to znamená, že nás zachránil a má nás rád.',
+				'Modlitba za druhé. Pomodlím se za lidi, kteří nejsou moji blízcí kamarádi. Potom svoji zkušenost sdělím někomu, komu důvěřuji.',
+				'Podobenství. Společně se šestkou si přečteme některé z Ježíšových podobenství (O ztracené ovci, O dělnících na vinici, O svatební hostině, O hřivnách nebo jiné) a najdeme v příběhu tři ponaučení.',
+				'Dobrý skutek. Dobrým činem udělám radost někomu, kdo je smutný, opuštěný, nemocný či chudý. Úkol mohu splnit např. spolu s rodiči nebo účastí na dobročinné akci.',
+				'Osobní vztah s Ježíšem. Popovídám si s vedoucím nebo s někým, komu důvěřuji, o tom, čím dělám Ježíši radost, a čím ne.',
+				'Pravidelná modlitba. Pravidelně se snažím modlit, děkovat za to, co v životě mám, a z přírodních materiálů vyrobím něco, za co děkuji.',
+				'Život s Ježíšem. Vybavím si situaci či událost ze svého života. Nakreslím obrázek o tom, jak proběhla, a obrázek, jak by proběhla, kdyby Ježíš nebyl v mém životě. Spolu s vedoucím je porovnám.',
+			] ],
+			[ 'Průvodce křesťanskou kulturou', [
+				'Křesťanství v umění. Najdu (např. v knihách, na internetu) dva obrazy (nebo dvě hudební skladby, písně, básně či dvě sochy) znázorňující události ze života Ježíše, jeho maminky Marie nebo apoštolů. Ukážu je šestce a vysvětlím, o čem jsou. (Tímto úkolem si splníš i úkol Krása ze stezky 2. stupně.)',
+				'Křesťanská kultura okolo mě. Ve svém okolí najdu dvě památky, stavby, umělecká díla nebo jiné projevy křesťanské kultury, ukážu je (příp. na fotografii) šestce a řeknu, k čemu slouží a co se mi na nich líbí.',
+				'Počátky křesťanství. Přečtu nebo si poslechnu jeden z biblických příběhů o počátcích církve (Marek 1. kapitola, verš 14–20; Skutky apoštolů 2. kapitola; Matouš 10. kapitola; nebo jiný vhodný text). Zeptám se na vše, čemu nerozumím.',
+				'Křesťanské symboly. Nakreslím tři ze základních symbolů křesťanství – např. kříž, ryba, kalich, beránek nebo holubice – a jejich význam popíšu šestce.',
+				'Modlitba Páně. Znám modlitbu Páně (Otčenáš) a tři její verše vysvětlím kamarádům z šestky.',
+				'Směry křesťanství. Zjistím, co mají společného a čím se liší základní směry křesťanství (katolíci, pravoslavní, protestanti), co jsem zjistil/a, představím svému vedoucímu.',
+				'Bohoslužby v různých církvích. Sám nebo s někým blízkým navštívím bohoslužby nebo online bohoslužby dvou různých církví. A řeknu, v čem se liší, nebo se podělím o něco, čeho jsem si všiml/a.',
+				'Křesťanství ve světě. Na mapě Evropy, kterou si připravím (hrubě nakreslím nebo vytisknu), vyznačím (např. vybarvením) převládající směry křesťanského náboženství. Vyznačím dvě místa důležitá pro křesťanství a ukážu mapu šestce.',
+				'Patroni skautů. Vyberu si jednoho ze skautských patronů (sv. Alžběta Durynská, sv. František, sv. Anežka, sv. apoštol Pavel, sv. Jiří) nebo některého významného křesťanského myslitele (např. J. A. Komenský, M. Luther) a nakreslím obrázek s věcmi pro něj typickými. Své dílo ukážu šestce a popíšu vlastnosti dané osoby.',
+				'Velikonoce. Pomocí krátké scénky vysvětlím šestce jednotlivé dny velikonočních svátků (Zelený čtvrtek, Velký pátek, Bílá sobota, Velikonoční neděle). Zaměřím se hlavně na příběh Ježíše v oněch dnech.',
 			] ],
 		];
 
