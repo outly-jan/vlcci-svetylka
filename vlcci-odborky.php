@@ -28,6 +28,23 @@ class VlcciOdborky {
 		$this->migrate_nove_odborky_v2();
 		$this->migrate_obrazky_v3();
 		$this->migrate_obrazky_v4();
+		$this->migrate_nasivky_v5();
+	}
+
+	private function migrate_nasivky_v5(): void {
+		if ( get_option( 'vo_migration_nasivky_v5' ) ) return;
+		global $wpdb;
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		$c = $wpdb->get_charset_collate();
+		dbDelta( "CREATE TABLE {$wpdb->prefix}vo_nasivky (
+			id int NOT NULL AUTO_INCREMENT,
+			dite_id int NOT NULL,
+			odborka_id int NOT NULL,
+			datum_predani date NOT NULL,
+			PRIMARY KEY (id),
+			UNIQUE KEY dite_odborka (dite_id, odborka_id)
+		) $c;" );
+		update_option( 'vo_migration_nasivky_v5', '1' );
 	}
 
 	private function migrate_obrazky_v4(): void {
@@ -186,6 +203,15 @@ class VlcciOdborky {
 			poradi tinyint NOT NULL DEFAULT 0,
 			nazev text NOT NULL,
 			PRIMARY KEY (id)
+		) $c;" );
+
+		dbDelta( "CREATE TABLE {$wpdb->prefix}vo_nasivky (
+			id int NOT NULL AUTO_INCREMENT,
+			dite_id int NOT NULL,
+			odborka_id int NOT NULL,
+			datum_predani date NOT NULL,
+			PRIMARY KEY (id),
+			UNIQUE KEY dite_odborka (dite_id, odborka_id)
 		) $c;" );
 
 		dbDelta( "CREATE TABLE {$wpdb->prefix}vo_plneni (
@@ -1667,6 +1693,7 @@ class VlcciOdborky {
 			case 'save_vedouci':         $this->app_do_save_vedouci( $base );         break;
 			case 'delete_plneni_odborka':  $this->app_do_delete_plneni_odborka( $base );  break;
 			case 'pridat_bez_data':        $this->app_do_pridat_bez_data( $base );        break;
+			case 'predat_nasivku':         $this->app_do_predat_nasivku( $base );         break;
 		}
 	}
 
@@ -1825,6 +1852,27 @@ class VlcciOdborky {
 		$this->app_redirect( $base, 'oddily', [ 'oddil_id' => $oddil_id ] );
 	}
 
+	private function app_do_predat_nasivku( string $base ): void {
+		global $wpdb;
+		$dite_id    = intval( $_POST['dite_id'] ?? 0 );
+		$odborka_id = intval( $_POST['odborka_id'] ?? 0 );
+		$d = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE id=%d", $dite_id ) );
+		if ( ! $d || ! $this->can_edit_sestka( (int) $d->sestka_id ) ) wp_die( 'Přístup odepřen.' );
+		$datum = gmdate( 'Y-m-d' );
+		$wpdb->query( $wpdb->prepare(
+			"INSERT INTO {$wpdb->prefix}vo_nasivky (dite_id,odborka_id,datum_predani) VALUES (%d,%d,%s)
+			 ON DUPLICATE KEY UPDATE datum_predani=%s",
+			$dite_id, $odborka_id, $datum, $datum
+		) );
+		$this->app_set_flash( 'Nášivka označena jako předaná.' );
+		$back_to = sanitize_key( $_POST['back_to'] ?? 'nasivky' );
+		if ( $back_to === 'plneni' ) {
+			$this->app_redirect( $base, 'plneni', [ 'dite_id' => $dite_id, 'odborka_id' => $odborka_id ] );
+		} else {
+			$this->app_redirect( $base, 'nasivky' );
+		}
+	}
+
 	// ── APP SHORTCODE & ROUTING ───────────────────────────────────────────────
 
 	public function shortcode_app( array $atts ): string {
@@ -1855,6 +1903,7 @@ class VlcciOdborky {
 			case 'dite':          $this->app_page_dite();          break;
 			case 'po_detech':     $this->app_page_po_detech();     break;
 			case 'po_odborkach':  $this->app_page_po_odborkach();  break;
+			case 'nasivky':       $this->app_page_nasivky();       break;
 			case 'ukoly':         $this->app_page_ukoly();         break;
 			case 'deti':          $this->app_page_deti();          break;
 			case 'oddily':        $this->app_page_oddily();        break;
@@ -1872,6 +1921,7 @@ class VlcciOdborky {
 			'plneni'       => '✏️ Plnění',
 			'po_detech'    => '👤 Po jménech',
 			'po_odborkach' => '🏅 Po odborkách',
+			'nasivky'      => '📦 Nášivky',
 			'ukoly'        => '📋 Úkoly',
 			'deti'         => '🧑‍🤝‍🧑 Správa členů',
 			'napoveda'     => '❓ Nápověda',
@@ -2126,7 +2176,30 @@ class VlcciOdborky {
 		echo '<span class="voa-progress-text">' . $p['done'] . '/' . $p['total'] . ' úkolů';
 		if ( $p['splneno'] ) echo ' &nbsp;<strong class="voa-green">✓ SPLNĚNO</strong>';
 		else echo ' <span class="voa-muted">(min. ' . $p['min'] . ')</span>';
-		echo '</span></div></div></div>';
+		echo '</span></div>';
+		if ( $p['splneno'] ) {
+			$nasivka_datum = $wpdb->get_var( $wpdb->prepare(
+				"SELECT datum_predani FROM {$wpdb->prefix}vo_nasivky WHERE dite_id=%d AND odborka_id=%d",
+				$dite_id, $odborka_id
+			) );
+			if ( $nasivka_datum ) {
+				echo '<div class="voa-nasivka-status voa-nasivka-status--predana">📦 Nášivka předána: ' . esc_html( date_format( date_create( $nasivka_datum ), 'd. m. Y' ) ) . '</div>';
+			} else {
+				echo '<div class="voa-nasivka-status voa-nasivka-status--pending">📦 Nášivka zatím nepředána';
+				if ( $can_edit ) {
+					echo '<form method="post" style="display:inline;margin-left:10px">';
+					echo $this->app_nonce( 'predat_nasivku' ) . $this->app_base_field();
+					echo '<input type="hidden" name="_vo_app_action" value="predat_nasivku">';
+					echo '<input type="hidden" name="back_to" value="plneni">';
+					echo '<input type="hidden" name="dite_id" value="' . $dite_id . '">';
+					echo '<input type="hidden" name="odborka_id" value="' . $odborka_id . '">';
+					echo '<button type="submit" class="voa-btn voa-btn-primary voa-btn-sm">✅ Předat</button>';
+					echo '</form>';
+				}
+				echo '</div>';
+			}
+		}
+		echo '</div></div>';
 
 		if ( $can_edit ) {
 			// Přidělit bez data — samostatný formulář PŘED hlavním formulářem (vnořené formy jsou zakázané)
@@ -2241,6 +2314,84 @@ class VlcciOdborky {
 				echo '<button type="submit" class="voa-btn voa-btn-danger" onclick="return confirm(\'Opravdu smazat veškeré plnění odborky ' . esc_js( $odborka->nazev ) . ' pro ' . esc_js( $d->prezdivka ) . '?\')">🗑 Smazat veškeré plnění odborky</button>';
 				echo '</form>';
 			}
+			echo '</div>';
+		}
+	}
+
+	private function app_page_nasivky(): void {
+		global $wpdb;
+		echo '<h1 class="voa-page-title">Nášivky</h1>';
+		$my_sestky = $this->my_sestky();
+		$my_ids    = array_map( fn($s) => (int)$s->id, $my_sestky );
+		if ( empty( $my_ids ) ) {
+			echo '<div class="voa-empty">Nemáte přiřazenu žádnou šestku.</div>';
+			return;
+		}
+		$sestka_in = implode( ',', $my_ids );
+		$odborky   = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_odborky ORDER BY nazev" ) ?: [];
+		$deti      = $wpdb->get_results(
+			"SELECT d.*, s.nazev AS sestka_nazev, o.nazev AS oddil_nazev, o.typ AS oddil_typ
+			 FROM {$wpdb->prefix}vo_deti d
+			 LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id
+			 LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id
+			 WHERE d.aktivni=1 AND d.sestka_id IN ($sestka_in)
+			 ORDER BY o.nazev, s.nazev, d.prijmeni, d.jmeno"
+		) ?: [];
+
+		$dluzene = [];
+		foreach ( $deti as $d ) {
+			foreach ( $odborky as $o ) {
+				if ( $o->typ !== 'oba' && $o->typ !== $d->oddil_typ ) continue;
+				$p = $this->progress( (int)$d->id, (int)$o->id );
+				if ( ! $p['splneno'] ) continue;
+				$nasivka = $wpdb->get_var( $wpdb->prepare(
+					"SELECT id FROM {$wpdb->prefix}vo_nasivky WHERE dite_id=%d AND odborka_id=%d",
+					$d->id, $o->id
+				) );
+				if ( $nasivka ) continue;
+				$dluzene[] = [ 'd' => $d, 'o' => $o ];
+			}
+		}
+
+		echo '<h2 class="voa-section-title" style="margin-top:0">Přehled dlužených nášivek</h2>';
+		if ( empty( $dluzene ) ) {
+			echo '<div class="voa-empty">Žádné dlužené nášivky — vše předáno! 🎉</div>';
+			return;
+		}
+
+		$counts = [];
+		foreach ( $dluzene as $row ) {
+			$oid = (int)$row['o']->id;
+			if ( ! isset( $counts[$oid] ) ) $counts[$oid] = [ 'o' => $row['o'], 'cnt' => 0 ];
+			$counts[$oid]['cnt']++;
+		}
+		uasort( $counts, fn($a,$b) => $b['cnt'] <=> $a['cnt'] );
+
+		echo '<div class="voa-card" style="margin-bottom:24px;overflow:auto"><table style="width:100%;border-collapse:collapse;min-width:260px">';
+		echo '<thead><tr><th style="text-align:left;padding:8px 12px;border-bottom:2px solid #ddd;font-size:13px">Odborka</th><th style="text-align:right;padding:8px 12px;border-bottom:2px solid #ddd;font-size:13px">Počet</th></tr></thead><tbody>';
+		foreach ( $counts as $c ) {
+			echo '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee"><div style="display:flex;align-items:center;gap:8px">';
+			if ( $c['o']->obrazek ) echo '<img src="' . esc_url( $this->img_url( $c['o']->obrazek ) ) . '" style="width:20px;height:20px;object-fit:contain" alt="">';
+			echo esc_html( $c['o']->nazev ) . '</div></td>';
+			echo '<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:700">' . $c['cnt'] . '</td></tr>';
+		}
+		echo '</tbody></table></div>';
+
+		echo '<h2 class="voa-section-title">K předání (' . count( $dluzene ) . ')</h2>';
+		foreach ( $dluzene as $row ) {
+			$d = $row['d']; $o = $row['o'];
+			echo '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:#fff;border:1px solid #ddd;border-radius:4px;margin-bottom:8px;flex-wrap:wrap">';
+			if ( $o->obrazek ) echo '<img src="' . esc_url( $this->img_url( $o->obrazek ) ) . '" style="width:36px;height:36px;object-fit:contain;flex-shrink:0" alt="">';
+			echo '<div style="flex:1;min-width:120px"><strong>' . esc_html( $d->prezdivka ) . '</strong> <span class="voa-muted">' . esc_html( $d->jmeno . ' ' . $d->prijmeni ) . '</span>';
+			echo '<div style="font-size:12px;color:#555">' . esc_html( $o->nazev ) . ' &nbsp;·&nbsp; ' . esc_html( $d->oddil_nazev . ' / ' . $d->sestka_nazev ) . '</div></div>';
+			echo '<form method="post" style="flex-shrink:0">';
+			echo $this->app_nonce( 'predat_nasivku' ) . $this->app_base_field();
+			echo '<input type="hidden" name="_vo_app_action" value="predat_nasivku">';
+			echo '<input type="hidden" name="back_to" value="nasivky">';
+			echo '<input type="hidden" name="dite_id" value="' . (int)$d->id . '">';
+			echo '<input type="hidden" name="odborka_id" value="' . (int)$o->id . '">';
+			echo '<button type="submit" class="voa-btn voa-btn-primary voa-btn-sm">✅ Předat</button>';
+			echo '</form>';
 			echo '</div>';
 		}
 	}
@@ -2902,6 +3053,10 @@ class VlcciOdborky {
 .voa-sestka-info{flex:1}
 .voa-sestka-actions{display:flex;gap:10px;align-items:center;flex-shrink:0}
 .voa-sestka-edit-form{background:#f0faf0;border:1px solid #b8d4be;border-radius:4px;padding:14px;margin:8px 0 4px}
+/* Nášivky */
+.voa-nasivka-status{margin-top:8px;padding:6px 10px;border-radius:4px;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.voa-nasivka-status--predana{background:#d1e7dd;color:#0a5b2e}
+.voa-nasivka-status--pending{background:#fff3cd;color:#856404}
 /* Po dětech */
 .voa-odborky-row{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0 4px}
 .voa-odborka-mini{display:flex;flex-direction:column;align-items:center;text-align:center;width:86px;padding:7px 5px;background:#fff;border:1px solid #ddd;border-radius:4px;text-decoration:none;color:#333;font-size:11px;transition:border-color .15s;gap:3px}
