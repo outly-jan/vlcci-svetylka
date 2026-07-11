@@ -2353,9 +2353,9 @@ class VlcciOdborky {
 			}
 		}
 
-		echo '<h2 class="voa-section-title" style="margin-top:0">Přehled dlužených nášivek</h2>';
+		echo '<h2 class="voa-section-title" style="margin-top:0">Přehled nepředaných nášivek</h2>';
 		if ( empty( $dluzene ) ) {
-			echo '<div class="voa-empty">Žádné dlužené nášivky — vše předáno! 🎉</div>';
+			echo '<div class="voa-empty">Žádné nepředané nášivky — vše předáno! 🎉</div>';
 			return;
 		}
 
