@@ -1865,9 +1865,12 @@ class VlcciOdborky {
 			$dite_id, $odborka_id, $datum, $datum
 		) );
 		$this->app_set_flash( 'Nášivka označena jako předaná.' );
-		$back_to = sanitize_key( $_POST['back_to'] ?? 'nasivky' );
+		$back_to   = sanitize_key( $_POST['back_to'] ?? 'nasivky' );
+		$sestka_id = intval( $_POST['sestka_id'] ?? 0 );
 		if ( $back_to === 'plneni' ) {
 			$this->app_redirect( $base, 'plneni', [ 'dite_id' => $dite_id, 'odborka_id' => $odborka_id ] );
+		} elseif ( $sestka_id ) {
+			$this->app_redirect( $base, 'nasivky', [ 'sestka_id' => $sestka_id ] );
 		} else {
 			$this->app_redirect( $base, 'nasivky' );
 		}
@@ -1888,7 +1891,7 @@ class VlcciOdborky {
 (function(){
   var key="voa_scroll";
   var y=sessionStorage.getItem(key);
-  if(y!==null){window.scrollTo(0,parseInt(y,10));sessionStorage.removeItem(key);}
+  if(y!==null){window.addEventListener("load",function(){window.scrollTo(0,parseInt(y,10));sessionStorage.removeItem(key);});}
   document.addEventListener("submit",function(e){
     if(e.target.closest(".voa-wrap")){sessionStorage.setItem(key,window.scrollY);}
   });
@@ -2321,15 +2324,27 @@ class VlcciOdborky {
 	private function app_page_nasivky(): void {
 		global $wpdb;
 		echo '<h1 class="voa-page-title">Nášivky</h1>';
-		$my_sestky = $this->my_sestky();
-		$my_ids    = array_map( fn($s) => (int)$s->id, $my_sestky );
+		$my_sestky   = $this->my_sestky();
+		$my_ids      = array_map( fn($s) => (int)$s->id, $my_sestky );
 		if ( empty( $my_ids ) ) {
 			echo '<div class="voa-empty">Nemáte přiřazenu žádnou šestku.</div>';
 			return;
 		}
-		$sestka_in = implode( ',', $my_ids );
-		$odborky   = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_odborky ORDER BY nazev" ) ?: [];
-		$deti      = $wpdb->get_results(
+		$sestka_id_f = intval( $_GET['sestka_id'] ?? 0 );
+		if ( $sestka_id_f && ! in_array( $sestka_id_f, $my_ids ) ) $sestka_id_f = 0;
+
+		// Záložky filtrování
+		echo '<div class="voa-tabs" style="margin-bottom:20px">';
+		echo '<a href="' . esc_url( $this->app_url( 'nasivky' ) ) . '" class="voa-tab' . ( ! $sestka_id_f ? ' voa-tab--active' : '' ) . '">Vše</a>';
+		foreach ( $my_sestky as $s ) {
+			echo '<a href="' . esc_url( $this->app_url( 'nasivky', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-tab' . ( (int)$s->id === $sestka_id_f ? ' voa-tab--active' : '' ) . '">' . esc_html( $s->nazev ) . '</a>';
+		}
+		echo '</div>';
+
+		$filter_ids = $sestka_id_f ? [ $sestka_id_f ] : $my_ids;
+		$sestka_in  = implode( ',', $filter_ids );
+		$odborky    = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_odborky ORDER BY nazev" ) ?: [];
+		$deti       = $wpdb->get_results(
 			"SELECT d.*, s.nazev AS sestka_nazev, o.nazev AS oddil_nazev, o.typ AS oddil_typ
 			 FROM {$wpdb->prefix}vo_deti d
 			 LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id
@@ -2388,6 +2403,7 @@ class VlcciOdborky {
 			echo $this->app_nonce( 'predat_nasivku' ) . $this->app_base_field();
 			echo '<input type="hidden" name="_vo_app_action" value="predat_nasivku">';
 			echo '<input type="hidden" name="back_to" value="nasivky">';
+			echo '<input type="hidden" name="sestka_id" value="' . $sestka_id_f . '">';
 			echo '<input type="hidden" name="dite_id" value="' . (int)$d->id . '">';
 			echo '<input type="hidden" name="odborka_id" value="' . (int)$o->id . '">';
 			echo '<button type="submit" class="voa-btn voa-btn-primary voa-btn-sm">✅ Předat</button>';
