@@ -1643,7 +1643,7 @@ class VlcciOdborky {
 	private function app_url( string $page = 'dashboard', array $extra = [] ): string {
 		global $post;
 		$base  = get_permalink( $post ) ?: home_url( '/' );
-		$clean = remove_query_arg( [ 'vo', 'dite_id', 'odborka_id', 'sestka_id', 'oddil_id', 'edit_id', 'edit_o', 'edit_s', 'ukol_id' ], $base );
+		$clean = remove_query_arg( [ 'vo', 'dite_id', 'odborka_id', 'sestka_id', 'oddil_id', 'edit_id', 'edit_o', 'edit_s', 'ukol_id', 'byvali' ], $base );
 		return add_query_arg( array_merge( [ 'vo' => $page ], $extra ), $clean );
 	}
 
@@ -2415,14 +2415,31 @@ class VlcciOdborky {
 	private function app_page_po_detech(): void {
 		global $wpdb;
 		$sestka_id_f = intval( $_GET['sestka_id'] ?? 0 );
+		$byvali      = intval( $_GET['byvali'] ?? 0 );
 		$sestky      = $this->my_sestky();
 		echo '<h1 class="voa-page-title">Přehled po dětech</h1>';
-		echo '<div class="voa-tabs" style="margin-bottom:20px"><a href="' . esc_url( $this->app_url( 'po_detech' ) ) . '" class="voa-tab' . ( ! $sestka_id_f ? ' voa-tab--active' : '' ) . '">Vše</a>';
-		foreach ( $sestky as $s ) echo '<a href="' . esc_url( $this->app_url( 'po_detech', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-tab' . ( (int)$s->id === $sestka_id_f ? ' voa-tab--active' : '' ) . '">' . esc_html( $s->nazev ) . '</a>';
+
+		// Řádek 1: výběr šestky
+		echo '<div class="voa-tabs" style="margin-bottom:8px">';
+		$base_extra = $byvali ? [ 'byvali' => 1 ] : [];
+		echo '<a href="' . esc_url( $this->app_url( 'po_detech', $base_extra ) ) . '" class="voa-tab' . ( ! $sestka_id_f ? ' voa-tab--active' : '' ) . '">Vše</a>';
+		foreach ( $sestky as $s ) {
+			$extra = array_merge( [ 'sestka_id' => $s->id ], $base_extra );
+			echo '<a href="' . esc_url( $this->app_url( 'po_detech', $extra ) ) . '" class="voa-tab' . ( (int)$s->id === $sestka_id_f ? ' voa-tab--active' : '' ) . '">' . esc_html( $s->nazev ) . '</a>';
+		}
 		echo '</div>';
-		$my_ids = array_map( fn($s) => (int)$s->id, $sestky );
-		$where  = $sestka_id_f ? $wpdb->prepare( 'AND d.sestka_id=%d', $sestka_id_f ) : ( $my_ids ? 'AND d.sestka_id IN (' . implode( ',', $my_ids ) . ')' : 'AND 1=0' );
-		$deti  = $wpdb->get_results( "SELECT d.*, s.nazev AS sestka_nazev, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_deti d LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE d.aktivni=1 $where ORDER BY o.nazev, s.nazev, d.prijmeni, d.jmeno" ) ?: [];
+
+		// Řádek 2: Aktivní / Bývalí členové
+		$sestka_extra = $sestka_id_f ? [ 'sestka_id' => $sestka_id_f ] : [];
+		echo '<div class="voa-tabs voa-tabs--sm" style="margin-bottom:20px">';
+		echo '<a href="' . esc_url( $this->app_url( 'po_detech', $sestka_extra ) ) . '" class="voa-tab' . ( ! $byvali ? ' voa-tab--active' : '' ) . '">Aktivní</a>';
+		echo '<a href="' . esc_url( $this->app_url( 'po_detech', array_merge( $sestka_extra, [ 'byvali' => 1 ] ) ) ) . '" class="voa-tab' . ( $byvali ? ' voa-tab--active' : '' ) . '">Bývalí členové</a>';
+		echo '</div>';
+
+		$my_ids    = array_map( fn($s) => (int)$s->id, $sestky );
+		$where     = $sestka_id_f ? $wpdb->prepare( 'AND d.sestka_id=%d', $sestka_id_f ) : ( $my_ids ? 'AND d.sestka_id IN (' . implode( ',', $my_ids ) . ')' : 'AND 1=0' );
+		$aktivni_v = $byvali ? 0 : 1;
+		$deti      = $wpdb->get_results( "SELECT d.*, s.nazev AS sestka_nazev, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_deti d LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE d.aktivni=$aktivni_v $where ORDER BY o.nazev, s.nazev, d.prijmeni, d.jmeno" ) ?: [];
 		$shown = 0;
 		foreach ( $deti as $d ) {
 			$odborky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE (typ='oba' OR typ=%s) ORDER BY nazev", $d->typ ) ) ?: [];
@@ -2443,7 +2460,7 @@ class VlcciOdborky {
 			}
 			echo '</div></div>';
 		}
-		if ( ! $shown ) echo '<div class="voa-empty">Žádná data k zobrazení.</div>';
+		if ( ! $shown ) echo '<div class="voa-empty">' . ( $byvali ? 'Žádní bývalí členové s plněním.' : 'Žádná data k zobrazení.' ) . '</div>';
 	}
 
 	private function app_page_po_odborkach(): void {
@@ -2645,27 +2662,41 @@ class VlcciOdborky {
 			? $wpdb->get_results( "SELECT s.*, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_sestky s LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id ORDER BY o.nazev, s.nazev" ) ?: []
 			: $my_sestky;
 		$sestka_id  = intval( $_GET['sestka_id'] ?? ( $my_sestky[0]->id ?? 0 ) );
+		$byvali     = intval( $_GET['byvali'] ?? 0 );
 		$edit_id    = intval( $_GET['edit_id'] ?? 0 );
 		$edit_d     = $edit_id ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE id=%d", $edit_id ) ) : null;
 		$can_edit   = $this->can_edit_sestka( $sestka_id );
 
 		echo '<h1 class="voa-page-title">Správa dětí</h1>';
-		echo '<div class="voa-tabs" style="margin-bottom:20px">';
-		foreach ( $my_sestky as $s ) echo '<a href="' . esc_url( $this->app_url( 'deti', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-tab' . ( (int)$s->id === $sestka_id ? ' voa-tab--active' : '' ) . '">' . esc_html( $s->oddil_nazev . ' — ' . $s->nazev ) . '</a>';
+		echo '<div class="voa-tabs" style="margin-bottom:12px">';
+		foreach ( $my_sestky as $s ) {
+			$extra = $byvali ? [ 'sestka_id' => $s->id, 'byvali' => 1 ] : [ 'sestka_id' => $s->id ];
+			echo '<a href="' . esc_url( $this->app_url( 'deti', $extra ) ) . '" class="voa-tab' . ( (int)$s->id === $sestka_id ? ' voa-tab--active' : '' ) . '">' . esc_html( $s->oddil_nazev . ' — ' . $s->nazev ) . '</a>';
+		}
+		echo '</div>';
+		echo '<div class="voa-tabs voa-tabs--sm" style="margin-bottom:20px">';
+		echo '<a href="' . esc_url( $this->app_url( 'deti', [ 'sestka_id' => $sestka_id ] ) ) . '" class="voa-tab' . ( ! $byvali ? ' voa-tab--active' : '' ) . '">Aktivní</a>';
+		echo '<a href="' . esc_url( $this->app_url( 'deti', [ 'sestka_id' => $sestka_id, 'byvali' => 1 ] ) ) . '" class="voa-tab' . ( $byvali ? ' voa-tab--active' : '' ) . '">Bývalí členové</a>';
 		echo '</div>';
 
-		$deti = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d ORDER BY prijmeni, jmeno", $sestka_id ) ) ?: [];
-		echo '<div class="voa-card"><div style="overflow-x:auto"><table class="voa-table"><thead><tr><th>Příjmení</th><th>Jméno</th><th>Přezdívka</th><th>Aktivní</th><th></th></tr></thead><tbody>';
-		foreach ( $deti as $d ) {
-			echo '<tr' . ( $d->aktivni ? '' : ' style="opacity:.55"' ) . '><td>' . esc_html( $d->prijmeni ) . '</td><td>' . esc_html( $d->jmeno ) . '</td><td><strong>' . esc_html( $d->prezdivka ) . '</strong></td><td>' . ( $d->aktivni ? '<span class="voa-green">✓</span>' : '–' ) . '</td>';
-			echo '<td class="voa-table-actions"><a href="' . esc_url( $this->app_url( 'dite', [ 'dite_id' => $d->id ] ) ) . '" class="voa-link">Detail</a>';
-			if ( $can_edit ) {
-				echo ' <a href="' . esc_url( $this->app_url( 'deti', [ 'sestka_id' => $sestka_id, 'edit_id' => $d->id ] ) ) . '" class="voa-link">Upravit</a>';
-				echo ' <form style="display:inline" method="post">' . $this->app_nonce( 'delete_dite' ) . $this->app_base_field() . '<input type="hidden" name="_vo_app_action" value="delete_dite"><input type="hidden" name="dite_id" value="' . $d->id . '"><button class="voa-link voa-link-danger" onclick="return confirm(\'Smazat?\')">Smazat</button></form>';
+		$aktivni_val = $byvali ? 0 : 1;
+		$deti = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=%d ORDER BY prijmeni, jmeno", $sestka_id, $aktivni_val ) ) ?: [];
+		if ( empty( $deti ) ) {
+			echo '<div class="voa-empty">' . ( $byvali ? 'Žádní bývalí členové.' : 'Žádné aktivní děti.' ) . '</div>';
+		} else {
+			echo '<div class="voa-card"><div style="overflow-x:auto"><table class="voa-table"><thead><tr><th>Příjmení</th><th>Jméno</th><th>Přezdívka</th><th></th></tr></thead><tbody>';
+			foreach ( $deti as $d ) {
+				echo '<tr><td>' . esc_html( $d->prijmeni ) . '</td><td>' . esc_html( $d->jmeno ) . '</td><td><strong>' . esc_html( $d->prezdivka ) . '</strong></td>';
+				$edit_extra = $byvali ? [ 'sestka_id' => $sestka_id, 'edit_id' => $d->id, 'byvali' => 1 ] : [ 'sestka_id' => $sestka_id, 'edit_id' => $d->id ];
+				echo '<td class="voa-table-actions"><a href="' . esc_url( $this->app_url( 'dite', [ 'dite_id' => $d->id ] ) ) . '" class="voa-link">Detail</a>';
+				if ( $can_edit ) {
+					echo ' <a href="' . esc_url( $this->app_url( 'deti', $edit_extra ) ) . '" class="voa-link">Upravit</a>';
+					echo ' <form style="display:inline" method="post">' . $this->app_nonce( 'delete_dite' ) . $this->app_base_field() . '<input type="hidden" name="_vo_app_action" value="delete_dite"><input type="hidden" name="dite_id" value="' . $d->id . '"><button class="voa-link voa-link-danger" onclick="return confirm(\'Smazat?\')">Smazat</button></form>';
+				}
+				echo '</td></tr>';
 			}
-			echo '</td></tr>';
+			echo '</tbody></table></div></div>';
 		}
-		echo '</tbody></table></div></div>';
 
 		if ( $can_edit ) {
 			$edit_sestky = $this->is_admin() ? $all_sestky : array_filter( $all_sestky, fn($s) => $this->can_edit_sestka( (int)$s->id ) );
@@ -2686,7 +2717,10 @@ class VlcciOdborky {
 			}
 			echo '<label class="voa-checkbox" style="align-self:end"><input type="checkbox" name="aktivni" value="1"' . ( ( $edit_d->aktivni ?? 1 ) ? ' checked' : '' ) . '> Aktivní</label>';
 			echo '<div class="voa-form-actions"><button type="submit" class="voa-btn voa-btn-primary">Uložit</button>';
-			if ( $edit_d ) echo ' <a href="' . esc_url( $this->app_url( 'deti', [ 'sestka_id' => $sestka_id ] ) ) . '" class="voa-btn voa-btn-secondary">Zrušit</a>';
+			if ( $edit_d ) {
+				$cancel_extra = $byvali ? [ 'sestka_id' => $sestka_id, 'byvali' => 1 ] : [ 'sestka_id' => $sestka_id ];
+				echo ' <a href="' . esc_url( $this->app_url( 'deti', $cancel_extra ) ) . '" class="voa-btn voa-btn-secondary">Zrušit</a>';
+			}
 			echo '</div></form></div>';
 		}
 	}
@@ -3069,6 +3103,8 @@ class VlcciOdborky {
 .voa-sestka-info{flex:1}
 .voa-sestka-actions{display:flex;gap:10px;align-items:center;flex-shrink:0}
 .voa-sestka-edit-form{background:#f0faf0;border:1px solid #b8d4be;border-radius:4px;padding:14px;margin:8px 0 4px}
+/* Bývalí členové — menší záložky */
+.voa-tabs--sm .voa-tab{font-size:12px;padding:4px 12px}
 /* Nášivky */
 .voa-nasivka-status{margin-top:8px;padding:6px 10px;border-radius:4px;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
 .voa-nasivka-status--predana{background:#d1e7dd;color:#0a5b2e}
