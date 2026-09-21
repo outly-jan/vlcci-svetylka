@@ -1909,6 +1909,7 @@ class VlcciOdborky {
 			case 'save_stezka_plneni':     $this->app_do_save_stezka_plneni( $base );     break;
 			case 'delete_stezka_plneni':   $this->app_do_delete_stezka_plneni( $base );   break;
 			case 'hromadne_stezka':        $this->app_do_hromadne_stezka( $base );        break;
+			case 'zrusit_stezka_stupen':   $this->app_do_zrusit_stezka_stupen( $base );   break;
 			case 'save_stezka_milnik':     $this->app_do_save_stezka_milnik( $base );     break;
 			case 'delete_stezka_milnik':   $this->app_do_delete_stezka_milnik( $base );   break;
 			case 'save_stezka_garant':     $this->app_do_save_stezka_garant( $base );     break;
@@ -2228,6 +2229,31 @@ class VlcciOdborky {
 		$this->app_redirect( $base, 'stezky' );
 	}
 
+	private function app_do_zrusit_stezka_stupen( string $base ): void {
+		if ( ! $this->is_admin() ) wp_die( 'Přístup odepřen.' );
+		global $wpdb;
+		$sestka_id = intval( $_POST['sestka_id'] ?? 0 );
+		$stupen    = sanitize_key( $_POST['stupen'] ?? '' );
+		$platne    = [ 'novacek', '1', '2', '3' ];
+		if ( ! $sestka_id || ! in_array( $stupen, $platne, true ) ) wp_die( 'Neplatné parametry.' );
+		$kompetence_ids = $wpdb->get_col( $wpdb->prepare(
+			"SELECT id FROM {$wpdb->prefix}vo_stezky_kompetence WHERE stupen=%s", $stupen
+		) );
+		if ( empty( $kompetence_ids ) ) {
+			$this->app_set_flash( 'Žádné kompetence pro daný stupeň.', 'error' );
+			$this->app_redirect( $base, 'stezky' );
+		}
+		$ids_list = implode( ',', array_map( 'intval', $kompetence_ids ) );
+		$count = $wpdb->query(
+			"DELETE sp FROM {$wpdb->prefix}vo_stezky_plneni sp
+			 JOIN {$wpdb->prefix}vo_deti d ON d.id=sp.dite_id
+			 WHERE d.sestka_id={$sestka_id} AND sp.kompetence_id IN ($ids_list)"
+		);
+		$stupne = $this->stezky_stupne();
+		$this->app_set_flash( 'Zrušeno ' . (int) $count . ' splnění pro ' . ( $stupne[ $stupen ] ?? $stupen ) . '.' );
+		$this->app_redirect( $base, 'stezky' );
+	}
+
 	private function app_do_save_stezka_milnik( string $base ): void {
 		global $wpdb;
 		$dite_id = intval( $_POST['dite_id'] ?? 0 );
@@ -2405,7 +2431,19 @@ class VlcciOdborky {
 		foreach ( $kompetence as $k ) $by_stupen[ $k->stupen ][] = $k;
 		foreach ( $stupne as $sk => $sl ) {
 			if ( empty( $by_stupen[ $sk ] ) ) continue;
-			echo '<h4 style="margin:16px 0 8px">' . esc_html( $sl ) . '</h4>';
+			echo '<div style="display:flex;align-items:center;gap:10px;margin:16px 0 8px">';
+			echo '<h4 style="margin:0">' . esc_html( $sl ) . '</h4>';
+			if ( $this->is_admin() ) {
+				foreach ( $edit_sestky as $s ) {
+					echo '<form method="post" style="display:inline">' . $this->app_nonce( 'zrusit_stezka_stupen' ) . $this->app_base_field();
+					echo '<input type="hidden" name="_vo_app_action" value="zrusit_stezka_stupen">';
+					echo '<input type="hidden" name="sestka_id" value="' . $s->id . '">';
+					echo '<input type="hidden" name="stupen" value="' . esc_attr( $sk ) . '">';
+					echo '<button class="voa-btn voa-btn-sm voa-link-danger" style="font-size:11px" onclick="return confirm(\'Zrušit celý ' . esc_js( $sl ) . ' šestce ' . esc_js( $s->nazev ) . '?\')">✕ ' . esc_html( $s->nazev ) . '</button>';
+					echo '</form>';
+				}
+			}
+			echo '</div>';
 			foreach ( $by_stupen[ $sk ] as $k ) {
 				echo '<div class="voa-sprava-row">';
 				echo '<div class="voa-sprava-info"><span class="voa-muted">' . esc_html( $k->oblast ) . '</span> · <strong>' . esc_html( $k->okruh ) . '</strong>';
