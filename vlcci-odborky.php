@@ -2376,6 +2376,30 @@ class VlcciOdborky {
 		if ( empty( $edit_sestky ) ) { echo '<div class="voa-empty">Žádné šestky.</div>'; return; }
 		$kompetence = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_stezky_kompetence ORDER BY poradi" ) ?: [];
 		$stupne = $this->stezky_stupne();
+		// Pro každou (kompetence_id, sestka_id) zjisti, zda mají splnění všechna aktivní vlčata
+		$sestka_ids_list = implode( ',', array_map( 'intval', array_column( $edit_sestky, 'id' ) ) );
+		$splneno_sestky = []; // [ kompetence_id ][ sestka_id ] = true/false
+		if ( $sestka_ids_list ) {
+			$rows = $wpdb->get_results(
+				"SELECT d.sestka_id, sp.kompetence_id,
+				        COUNT(DISTINCT d.id) AS total,
+				        COUNT(DISTINCT sp.dite_id) AS done
+				 FROM {$wpdb->prefix}vo_deti d
+				 LEFT JOIN {$wpdb->prefix}vo_stezky_plneni sp ON sp.dite_id=d.id AND sp.kompetence_id IS NOT NULL
+				 WHERE d.sestka_id IN ($sestka_ids_list) AND d.aktivni=1 AND d.clen_typ=\'vlce\'
+				 GROUP BY d.sestka_id, sp.kompetence_id"
+			) ?: [];
+			// Indexuj total per sestka
+			$total_per_sestka = [];
+			foreach ( $rows as $r ) {
+				if ( ! isset( $total_per_sestka[ $r->sestka_id ] ) ) $total_per_sestka[ $r->sestka_id ] = (int) $r->total;
+			}
+			foreach ( $rows as $r ) {
+				if ( $r->kompetence_id === null ) continue;
+				$total = $total_per_sestka[ $r->sestka_id ] ?? 0;
+				$splneno_sestky[ $r->kompetence_id ][ $r->sestka_id ] = $total > 0 && (int) $r->done >= $total;
+			}
+		}
 		$by_stupen = [];
 		foreach ( $kompetence as $k ) $by_stupen[ $k->stupen ][] = $k;
 		foreach ( $stupne as $sk => $sl ) {
@@ -2389,7 +2413,10 @@ class VlcciOdborky {
 				echo '<input type="hidden" name="_vo_app_action" value="hromadne_stezka">';
 				echo '<input type="hidden" name="kompetence_id" value="' . $k->id . '">';
 				foreach ( $edit_sestky as $s ) {
-					echo '<label class="voa-sprava-check"><input type="checkbox" name="sestka_ids[]" value="' . $s->id . '"> ' . esc_html( $s->nazev ) . '</label>';
+					$done = $splneno_sestky[ $k->id ][ $s->id ] ?? false;
+					$dis  = $done ? ' disabled title="Všechna vlčata již mají splněno"' : '';
+					$sty  = $done ? ' style="opacity:.45"' : '';
+					echo '<label class="voa-sprava-check"' . $sty . '><input type="checkbox" name="sestka_ids[]" value="' . $s->id . '"' . $dis . '> ' . esc_html( $s->nazev ) . '</label>';
 				}
 				echo '<button class="voa-btn voa-btn-sm voa-btn-secondary" onclick="return confirm(\'Uznat vybraným šestkám?\')">Uznat ✓</button>';
 				echo '</form>';
