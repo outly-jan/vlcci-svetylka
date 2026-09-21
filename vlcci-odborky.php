@@ -2558,12 +2558,14 @@ class VlcciOdborky {
 		foreach ( $kompetence as $k ) $by_stupen[ $k->stupen ][] = $k;
 		foreach ( $stupne as $sk => $sl ) {
 			if ( empty( $by_stupen[ $sk ] ) ) continue;
-			$p_st = $this->stezky_progress( $dite_id, $sk );
-			echo '<div class="voa-card" style="margin-bottom:20px"><h3 class="voa-card-title">' . esc_html( $sl ) . ' — ' . $p_st['done'] . '/' . $p_st['total'] . ( $p_st['splneno'] ? ' ✅' : '' ) . '</h3>';
+			$p_st    = $this->stezky_progress( $dite_id, $sk );
+			$open    = $p_st['splneno'] ? '' : ' open';
+			$summary = esc_html( $sl ) . ' — ' . $p_st['done'] . '/' . $p_st['total'] . ( $p_st['splneno'] ? ' ✅' : '' );
+			echo '<details' . $open . ' class="voa-card" style="margin-bottom:20px"><summary class="voa-card-title" style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px"><span class="voa-details-arrow">▶</span>' . $summary . '</summary>';
 			$by_oblast = [];
 			foreach ( $by_stupen[ $sk ] as $k ) $by_oblast[ $k->oblast ][] = $k;
 			foreach ( $by_oblast as $oblast => $klist ) {
-				echo '<h4 style="margin:16px 0 8px;color:#555">' . esc_html( $oblast ) . '</h4>';
+				echo '<h4 style="margin:16px 0 8px;color:#555;padding-top:8px">' . esc_html( $oblast ) . '</h4>';
 				foreach ( $klist as $k ) {
 					$splneno = isset( $plneni[ $k->id ] );
 					$pr      = $splneno ? $plneni[ $k->id ] : null;
@@ -2597,7 +2599,7 @@ class VlcciOdborky {
 					echo '</div>';
 				}
 			}
-			echo '</div>';
+			echo '</details>';
 		}
 	}
 
@@ -3773,6 +3775,10 @@ class VlcciOdborky {
 .voa-stezky-souhrn{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}
 .voa-stezky-card{flex:1;min-width:130px;padding:12px 14px;background:#fff;border:1px solid #ddd;border-radius:6px}
 .voa-stezky-card--done{border-color:#1a5c2a;background:#f0faf0}
+details.voa-card summary{padding:14px 16px;margin:-14px -16px;border-radius:6px}
+details.voa-card[open] summary{border-radius:6px 6px 0 0;margin-bottom:14px}
+details.voa-card .voa-details-arrow{transition:transform .2s;display:inline-block;font-size:11px;color:#888}
+details.voa-card[open] .voa-details-arrow{transform:rotate(90deg)}
 .voa-stezky-card-title{font-weight:600;font-size:13px;margin-bottom:4px}
 .voa-stezky-card-prog{font-size:18px;font-weight:700;color:#1a5c2a;margin-bottom:4px}
 .voa-stezka-kompetence{padding:10px 12px;border-radius:4px;border:1px solid #eee;margin-bottom:8px;background:#fafafa}
