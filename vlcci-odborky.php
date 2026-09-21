@@ -2332,6 +2332,7 @@ class VlcciOdborky {
 		if ( ! $sel_id ) return;
 		$k_row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_stezky_kompetence WHERE id=%d", $sel_id ) );
 		if ( ! $k_row ) { echo '<div class="voa-empty">Kompetence nenalezena.</div>'; return; }
+		$vyzaduje_novacka = in_array( $k_row->stupen, [ '1', '2', '3' ], true );
 		// Načti existující splnění
 		$sestka_ids_list = implode( ',', array_map( fn($s) => (int)$s->id, $edit_sestky ) );
 		$splneni_map = [];
@@ -2341,6 +2342,24 @@ class VlcciOdborky {
 			 WHERE sp.kompetence_id=%d AND d.sestka_id IN ($sestka_ids_list)", $sel_id
 		) ) ?: [];
 		foreach ( $rows as $r ) $splneni_map[ $r->dite_id ] = $r->datum;
+		// Zjisti, kdo má splněného Nováčka (pokud je potřeba)
+		$ma_novacka = [];
+		if ( $vyzaduje_novacka ) {
+			$total_nov = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_kompetence WHERE stupen='novacek'" );
+			if ( $total_nov > 0 ) {
+				$nov_rows = $wpdb->get_results(
+					"SELECT sp.dite_id, COUNT(*) AS done
+					 FROM {$wpdb->prefix}vo_stezky_plneni sp
+					 JOIN {$wpdb->prefix}vo_stezky_kompetence k ON k.id=sp.kompetence_id
+					 JOIN {$wpdb->prefix}vo_deti d ON d.id=sp.dite_id
+					 WHERE k.stupen='novacek' AND d.sestka_id IN ($sestka_ids_list)
+					 GROUP BY sp.dite_id"
+				) ?: [];
+				foreach ( $nov_rows as $r ) {
+					if ( (int) $r->done >= $total_nov ) $ma_novacka[ $r->dite_id ] = true;
+				}
+			}
+		}
 		echo '<div class="voa-card" style="margin-bottom:16px">';
 		echo '<h3 class="voa-card-title">' . esc_html( $stupne[ $k_row->stupen ] ?? $k_row->stupen ) . ' · ' . esc_html( $k_row->oblast ) . ' · <strong>' . esc_html( $k_row->okruh ) . '</strong></h3>';
 		if ( $k_row->garant ) echo '<p class="voa-muted" style="margin:0 0 8px">Garant: ' . esc_html( $k_row->garant ) . '</p>';
@@ -2357,17 +2376,16 @@ class VlcciOdborky {
 			echo '<h4 class="voa-card-title" style="margin-bottom:10px">' . esc_html( $s->oddil_nazev . ' — ' . $s->nazev ) . '</h4>';
 			echo '<div class="voa-zapsat-grid">';
 			foreach ( $deti as $d ) {
-				$splneno = isset( $splneni_map[ $d->id ] );
-				$cls     = $splneno ? ' voa-zapsat-item--done' : '';
+				$splneno      = isset( $splneni_map[ $d->id ] );
+				$bez_novacka  = $vyzaduje_novacka && ! isset( $ma_novacka[ $d->id ] );
+				$disabled     = $splneno || $bez_novacka;
+				$cls          = $splneno ? ' voa-zapsat-item--done' : ( $bez_novacka ? ' voa-zapsat-item--locked' : '' );
 				echo '<label class="voa-zapsat-item' . $cls . '">';
-				if ( $splneno ) {
-					echo '<input type="checkbox" name="dite_ids[]" value="' . $d->id . '" disabled> ';
-				} else {
-					echo '<input type="checkbox" name="dite_ids[]" value="' . $d->id . '" checked> ';
-				}
+				echo '<input type="checkbox" name="dite_ids[]" value="' . $d->id . '"' . ( $disabled ? ' disabled' : ' checked' ) . '> ';
 				echo '<span class="voa-zapsat-name">' . esc_html( $d->prezdivka ) . '</span>';
 				echo '<span class="voa-zapsat-fullname">' . esc_html( $d->jmeno . ' ' . $d->prijmeni ) . '</span>';
-				if ( $splneno ) echo '<span class="voa-zapsat-splneno">✅ ' . esc_html( $splneni_map[ $d->id ] ) . '</span>';
+				if ( $splneno )     echo '<span class="voa-zapsat-splneno">✅ ' . esc_html( $splneni_map[ $d->id ] ) . '</span>';
+				if ( $bez_novacka ) echo '<span class="voa-zapsat-splneno" style="color:#b45309">⏳ Nejprve Nováček</span>';
 				echo '</label>';
 			}
 			echo '</div></div>';
@@ -3787,6 +3805,7 @@ class VlcciOdborky {
 .voa-zapsat-item{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:1px solid #ccc;border-radius:6px;cursor:pointer;min-width:130px;background:#fff;transition:background .15s}
 .voa-zapsat-item:hover{background:#f0faf0;border-color:#1a5c2a}
 .voa-zapsat-item--done{opacity:.55;cursor:default;background:#f5f5f5}
+.voa-zapsat-item--locked{opacity:.6;cursor:default;background:#fffbeb;border-color:#f59e0b}
 .voa-zapsat-name{font-weight:700;font-size:14px}
 .voa-zapsat-fullname{font-size:11px;color:#666}
 .voa-zapsat-splneno{font-size:11px;color:#1a5c2a;margin-top:2px}
