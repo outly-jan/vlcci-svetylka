@@ -2142,26 +2142,42 @@ class VlcciOdborky {
 	}
 
 	private function app_nav( string $active ): string {
-		$items = [
-			'dashboard'    => '🏠 Přehled',
-			'plneni'       => '✏️ Plnění',
-			'po_detech'    => '👤 Po jménech',
-			'po_odborkach' => '🏅 Po odborkách',
-			'nasivky'      => '📦 Nášivky',
-			'stezky'       => '🗺️ Stezky',
-			'ukoly'        => '📋 Úkoly',
-			'deti'         => '🧑‍🤝‍🧑 Správa členů',
-			'napoveda'     => '❓ Nápověda',
+		$groups = [
+			'' => [
+				'dashboard' => '🏠 Přehled',
+				'deti'      => '🧑‍🤝‍🧑 Správa členů',
+				'napoveda'  => '❓ Nápověda',
+			],
+			'Odborky' => [
+				'plneni'       => '✏️ Plnění',
+				'po_detech'    => '👤 Po jménech',
+				'po_odborkach' => '🏅 Po odborkách',
+				'nasivky'      => '📦 Nášivky',
+				'ukoly'        => '📋 Úkoly',
+			],
+			'Stezky' => [
+				'stezky' => '🗺️ Stezky',
+			],
 		];
 		if ( $this->is_admin() ) {
-			$items['oddily'] = '🏕️ Oddíly';
-			$items['filtr']  = '🔍 Filtr';
+			$groups[''][ 'oddily' ] = '🏕️ Oddíly';
+			$groups[''][ 'filtr' ]  = '🔍 Filtr';
 		}
-		$html  = '<div class="voa-menu-user">👤 ' . esc_html( wp_get_current_user()->display_name ) . '</div>';
+		$html  = '<div class="voa-menu-user">👤 ' . esc_html( wp_get_current_user()->display_name );
+		if ( $this->is_admin() ) $html .= ' <span class="voa-muted" style="font-size:11px">(A)</span>';
+		$html .= '</div>';
 		$html .= '<nav class="voa-menu">';
-		foreach ( $items as $key => $label ) {
-			$cls   = $key === $active ? ' voa-active' : '';
-			$html .= '<a href="' . esc_url( $this->app_url( $key ) ) . '" class="' . $cls . '">' . $label . '</a>';
+		foreach ( $groups as $group_label => $items ) {
+			if ( $group_label !== '' ) {
+				$html .= '<span class="voa-menu-group">' . esc_html( $group_label ) . '</span>';
+			}
+			foreach ( $items as $key => $label ) {
+				$cls   = $key === $active ? ' voa-active' : '';
+				$html .= '<a href="' . esc_url( $this->app_url( $key ) ) . '" class="' . $cls . '">' . $label . '</a>';
+			}
+			if ( $group_label !== '' ) {
+				$html .= '<span class="voa-menu-sep"></span>';
+			}
 		}
 		$html .= '</nav>';
 		return $html;
@@ -2692,6 +2708,17 @@ class VlcciOdborky {
 			echo '</div>';
 			$deti    = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 ORDER BY prijmeni, jmeno", $s->id ) ) ?: [];
 			$odborky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE (typ='oba' OR typ=%s) ORDER BY nazev", $s->typ ) ) ?: [];
+			// stezky: počet kompetencí celkem a splněných per dítě (jen vlčata)
+			$deti_ids = array_map( fn($d) => (int)$d->id, $deti );
+			$stezky_done = [];
+			if ( ! empty( $deti_ids ) && $s->typ === 'vlcata' ) {
+				$total_komp = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_kompetence" );
+				$ids_list   = implode( ',', $deti_ids );
+				$rows = $wpdb->get_results(
+					"SELECT dite_id, COUNT(*) AS done FROM {$wpdb->prefix}vo_stezky_plneni WHERE dite_id IN ($ids_list) GROUP BY dite_id"
+				) ?: [];
+				foreach ( $rows as $r ) $stezky_done[ $r->dite_id ] = [ 'done' => (int)$r->done, 'total' => $total_komp ];
+			}
 			if ( empty( $deti ) ) {
 				echo '<div style="padding:16px 20px"><p class="voa-muted">Žádné aktivní děti.</p></div>';
 			} else {
@@ -2705,6 +2732,10 @@ class VlcciOdborky {
 					echo '<div class="voa-child-stats">';
 					if ( $splneno ) echo '<span class="voa-badge-count voa-badge-count--green">' . $splneno . ' splněno</span>';
 					if ( $rozp )    echo '<span class="voa-badge-count voa-badge-count--orange">' . $rozp . ' rozp.</span>';
+					if ( isset( $stezky_done[ $d->id ] ) ) {
+						$sd = $stezky_done[ $d->id ];
+						echo '<span class="voa-badge-count voa-badge-count--blue">🗺️ ' . $sd['done'] . '/' . $sd['total'] . '</span>';
+					}
 					echo '</div></a>';
 				}
 				echo '</div>';
@@ -3615,11 +3646,14 @@ class VlcciOdborky {
 
 /* ── Frontend App ── */
 .voa-wrap{font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;font-size:14px;color:#333;max-width:1000px;margin:0}
-.voa-menu{display:flex;flex-wrap:wrap;gap:4px;border-bottom:3px solid #1a5c2a}
+.voa-menu{display:flex;flex-wrap:wrap;gap:4px;border-bottom:3px solid #1a5c2a;align-items:flex-end}
 .voa-menu a{font-size:12px;padding:7px 13px;background:#f0f0f0;color:#444;border:1px solid #ccc;border-bottom:none;border-radius:4px 4px 0 0;white-space:nowrap;text-decoration:none;transition:background .15s;margin-bottom:-1px;display:inline-block}
 .voa-menu a:hover{background:#e0e0e0;color:#333}
 .voa-menu a.voa-active{background:#1a5c2a;color:#fff!important;border-color:#1a5c2a;font-weight:600}
+.voa-menu-group{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#888;padding:0 4px 6px;margin-left:6px;white-space:nowrap}
+.voa-menu-sep{width:1px;height:22px;background:#ccc;margin:0 4px 4px;display:inline-block;align-self:flex-end}
 .voa-menu-user{font-size:12px;color:#555;padding:4px 2px;text-align:right}
+.voa-badge-count--blue{background:#dbeafe;color:#1e40af;border:1px solid #93c5fd}
 .voa-content{padding:20px;background:#fff;border:1px solid #1a5c2a;border-top:none}
 .voa-login-box{padding:60px 20px;text-align:center;background:#fff;border:1px solid #1a5c2a;border-top:none}
 .voa-login-box p{margin-bottom:16px;font-size:15px;color:#555}
