@@ -2202,22 +2202,30 @@ class VlcciOdborky {
 
 	private function app_do_hromadne_stezka( string $base ): void {
 		global $wpdb;
-		$sestka_id     = intval( $_POST['sestka_id'] ?? 0 );
 		$kompetence_id = intval( $_POST['kompetence_id'] ?? 0 );
-		if ( ! $this->can_edit_sestka( $sestka_id ) ) wp_die( 'Přístup odepřen.' );
-		$datum    = gmdate( 'Y-m-d' );
-		$vedouci  = get_current_user_id();
-		$deti = $wpdb->get_results( $wpdb->prepare(
-			"SELECT id FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 AND clen_typ='vlce'", $sestka_id
-		) );
-		foreach ( $deti as $d ) {
-			$wpdb->query( $wpdb->prepare(
-				"INSERT IGNORE INTO {$wpdb->prefix}vo_stezky_plneni (dite_id,kompetence_id,datum,poznamka,vedouci_id) VALUES (%d,%d,%s,'',%d)",
-				$d->id, $kompetence_id, $datum, $vedouci
-			) );
+		$raw_ids       = array_map( 'intval', (array) ( $_POST['sestka_ids'] ?? [] ) );
+		$sestka_ids    = array_filter( $raw_ids, fn($id) => $id > 0 && $this->can_edit_sestka( $id ) );
+		if ( empty( $sestka_ids ) ) {
+			$this->app_set_flash( 'Nevybrána žádná šestka.', 'error' );
+			$this->app_redirect( $base, 'stezky' );
 		}
-		$this->app_set_flash( 'Kompetence uznána všem vlčatům šestky.' );
-		$this->app_redirect( $base, 'stezky', [ 'sestka_id' => $sestka_id ] );
+		$datum   = gmdate( 'Y-m-d' );
+		$vedouci = get_current_user_id();
+		$count   = 0;
+		foreach ( $sestka_ids as $sestka_id ) {
+			$deti = $wpdb->get_results( $wpdb->prepare(
+				"SELECT id FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 AND clen_typ='vlce'", $sestka_id
+			) );
+			foreach ( $deti as $d ) {
+				$rows = $wpdb->query( $wpdb->prepare(
+					"INSERT IGNORE INTO {$wpdb->prefix}vo_stezky_plneni (dite_id,kompetence_id,datum,poznamka,vedouci_id) VALUES (%d,%d,%s,'',%d)",
+					$d->id, $kompetence_id, $datum, $vedouci
+				) );
+				$count += (int) $rows;
+			}
+		}
+		$this->app_set_flash( 'Kompetence uznána ' . $count . ' vlčatům.' );
+		$this->app_redirect( $base, 'stezky' );
 	}
 
 	private function app_do_save_stezka_milnik( string $base ): void {
@@ -2353,13 +2361,19 @@ class VlcciOdborky {
 		echo '</tbody></table></div>';
 		if ( $can_edit ) {
 			echo '<details class="voa-card" style="margin-top:16px"><summary style="cursor:pointer;font-weight:600;padding:8px 0">⚙️ Správa kompetencí (hromadné uznání, garanti)</summary>';
-			$this->app_stezky_sprava( $sestka_id );
+			$this->app_stezky_sprava();
 			echo '</details>';
 		}
 	}
 
-	private function app_stezky_sprava( int $sestka_id ): void {
+	private function app_stezky_sprava(): void {
 		global $wpdb;
+		$all_sestky = $wpdb->get_results(
+			"SELECT s.id, s.nazev, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_sestky s
+			 JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE o.typ='vlcata' ORDER BY o.nazev, s.nazev"
+		) ?: [];
+		$edit_sestky = array_values( array_filter( $all_sestky, fn($s) => $this->can_edit_sestka( (int)$s->id ) ) );
+		if ( empty( $edit_sestky ) ) { echo '<div class="voa-empty">Žádné šestky.</div>'; return; }
 		$kompetence = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_stezky_kompetence ORDER BY poradi" ) ?: [];
 		$stupne = $this->stezky_stupne();
 		$by_stupen = [];
@@ -2367,25 +2381,27 @@ class VlcciOdborky {
 		foreach ( $stupne as $sk => $sl ) {
 			if ( empty( $by_stupen[ $sk ] ) ) continue;
 			echo '<h4 style="margin:16px 0 8px">' . esc_html( $sl ) . '</h4>';
-			echo '<table class="voa-table"><thead><tr><th>Oblast</th><th>Okruh</th><th>Garant</th><th>Hromadně uznat</th>' . ( $this->is_admin() ? '<th>Upravit</th>' : '' ) . '</tr></thead><tbody>';
 			foreach ( $by_stupen[ $sk ] as $k ) {
-				echo '<tr><td class="voa-muted">' . esc_html( $k->oblast ) . '</td><td>' . esc_html( $k->okruh ) . '</td>';
-				echo '<td>' . esc_html( $k->garant ?? '—' ) . '</td>';
-				echo '<td><form method="post" style="display:inline">' . $this->app_nonce( 'hromadne_stezka' ) . $this->app_base_field();
+				echo '<div class="voa-sprava-row">';
+				echo '<div class="voa-sprava-info"><span class="voa-muted">' . esc_html( $k->oblast ) . '</span> · <strong>' . esc_html( $k->okruh ) . '</strong>';
+				echo ' <span class="voa-muted" style="font-size:12px">(' . esc_html( $k->garant ?? '—' ) . ')</span></div>';
+				echo '<form method="post" class="voa-sprava-form">' . $this->app_nonce( 'hromadne_stezka' ) . $this->app_base_field();
 				echo '<input type="hidden" name="_vo_app_action" value="hromadne_stezka">';
-				echo '<input type="hidden" name="sestka_id" value="' . $sestka_id . '">';
 				echo '<input type="hidden" name="kompetence_id" value="' . $k->id . '">';
-				echo '<button class="voa-btn voa-btn-sm voa-btn-secondary" onclick="return confirm(\'Uznat všem vlčatům šestky?\')">Uznat všem</button></form></td>';
+				foreach ( $edit_sestky as $s ) {
+					echo '<label class="voa-sprava-check"><input type="checkbox" name="sestka_ids[]" value="' . $s->id . '"> ' . esc_html( $s->nazev ) . '</label>';
+				}
+				echo '<button class="voa-btn voa-btn-sm voa-btn-secondary" onclick="return confirm(\'Uznat vybraným šestkám?\')">Uznat ✓</button>';
+				echo '</form>';
 				if ( $this->is_admin() ) {
-					echo '<td><form method="post" style="display:inline;white-space:nowrap">' . $this->app_nonce( 'save_stezka_garant' ) . $this->app_base_field();
+					echo '<form method="post" class="voa-sprava-garant">' . $this->app_nonce( 'save_stezka_garant' ) . $this->app_base_field();
 					echo '<input type="hidden" name="_vo_app_action" value="save_stezka_garant">';
 					echo '<input type="hidden" name="kompetence_id" value="' . $k->id . '">';
-					echo '<input type="text" name="garant" value="' . esc_attr( $k->garant ?? '' ) . '" class="voa-input voa-input--sm" style="width:100px">';
-					echo ' <button class="voa-btn voa-btn-sm voa-btn-primary">OK</button></form></td>';
+					echo '<input type="text" name="garant" value="' . esc_attr( $k->garant ?? '' ) . '" class="voa-input voa-input--sm" style="width:90px" placeholder="Garant">';
+					echo ' <button class="voa-btn voa-btn-sm voa-btn-primary">OK</button></form>';
 				}
-				echo '</tr>';
+				echo '</div>';
 			}
-			echo '</tbody></table>';
 		}
 	}
 
@@ -3707,6 +3723,12 @@ class VlcciOdborky {
 .voa-badge--yellow{background:#fff3cd;color:#856404}
 .voa-btn-sm{font-size:12px;padding:3px 10px}
 .voa-input--sm{font-size:12px;padding:3px 7px;height:auto}
+.voa-sprava-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid #eee}
+.voa-sprava-row:last-child{border-bottom:none}
+.voa-sprava-info{flex:0 0 260px;min-width:180px}
+.voa-sprava-form{display:flex;flex-wrap:wrap;align-items:center;gap:6px;flex:1}
+.voa-sprava-check{font-size:12px;white-space:nowrap;display:flex;align-items:center;gap:3px}
+.voa-sprava-garant{display:flex;align-items:center;gap:4px}
 /* Po dětech */
 .voa-odborky-row{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0 4px}
 .voa-odborka-mini{display:flex;flex-direction:column;align-items:center;text-align:center;width:86px;padding:7px 5px;background:#fff;border:1px solid #ddd;border-radius:4px;text-decoration:none;color:#333;font-size:11px;transition:border-color .15s;gap:3px}
