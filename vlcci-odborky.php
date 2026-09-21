@@ -30,6 +30,7 @@ class VlcciOdborky {
 		$this->migrate_obrazky_v4();
 		$this->migrate_nasivky_v5();
 		$this->migrate_deti_typ_v6();
+		$this->migrate_stezky_v7();
 	}
 
 	private function migrate_nasivky_v5(): void {
@@ -64,6 +65,166 @@ class VlcciOdborky {
 			);
 		}
 		update_option( 'vo_migration_deti_typ_v6', '1' );
+	}
+
+	private function migrate_stezky_v7(): void {
+		if ( get_option( 'vo_migration_stezky_v7' ) ) return;
+		global $wpdb;
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		$c = $wpdb->get_charset_collate();
+		dbDelta( "CREATE TABLE {$wpdb->prefix}vo_stezky_kompetence (
+			id int NOT NULL AUTO_INCREMENT,
+			stupen enum('novacek','1','2','3') NOT NULL,
+			oblast varchar(200) NOT NULL,
+			okruh varchar(200) NOT NULL,
+			popis text,
+			garant varchar(100) DEFAULT NULL,
+			poradi int NOT NULL DEFAULT 0,
+			PRIMARY KEY (id)
+		) $c;" );
+		dbDelta( "CREATE TABLE {$wpdb->prefix}vo_stezky_plneni (
+			id int NOT NULL AUTO_INCREMENT,
+			dite_id int NOT NULL,
+			kompetence_id int NOT NULL,
+			datum date NOT NULL,
+			poznamka text,
+			vedouci_id int NOT NULL,
+			PRIMARY KEY (id),
+			UNIQUE KEY dite_kompetence (dite_id, kompetence_id)
+		) $c;" );
+		dbDelta( "CREATE TABLE {$wpdb->prefix}vo_stezky_milniky (
+			id int NOT NULL AUTO_INCREMENT,
+			dite_id int NOT NULL,
+			typ enum('slib','nasivka_1','nasivka_2','nasivka_3') NOT NULL,
+			datum date NOT NULL,
+			PRIMARY KEY (id),
+			UNIQUE KEY dite_typ (dite_id, typ)
+		) $c;" );
+		$existing = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_kompetence" );
+		if ( $existing === 0 ) {
+			$data = $this->stezky_kompetence_data();
+			foreach ( $data as $i => $row ) {
+				$wpdb->insert( "{$wpdb->prefix}vo_stezky_kompetence", [
+					'stupen'  => $row[0],
+					'oblast'  => $row[1],
+					'okruh'   => $row[2],
+					'popis'   => $row[3],
+					'garant'  => $row[4],
+					'poradi'  => $i + 1,
+				] );
+			}
+		}
+		update_option( 'vo_migration_stezky_v7', '1' );
+	}
+
+	private function stezky_kompetence_data(): array {
+		return [
+			// Nováček / Cesta ke slibu
+			['novacek', 'Cesta ke slibu', 'Jak se pozná vlče',     "Na obrázcích vidím, jak se chovají vlčata či světlušky. Označím, co už jsem si ve smečce vyzkoušel.", 'Spajdy'],
+			['novacek', 'Cesta ke slibu', 'Moje šestka',           "Patřím do šestky. Náš pokřik zní.\nDo rámečku si namaluji svoji šestku, nebo nalepím její fotku. Poprosím každého brášku ze šestky, aby se ke své podobizně podepsal.", 'Pivoňka'],
+			['novacek', 'Cesta ke slibu', 'Co s sebou na schůzku', "Vyberu z těchto věcí ty, které si mám nosit s sebou na schůzku, a zakroužkuji je.", 'Dustin'],
+			['novacek', 'Cesta ke slibu', 'Moje smečka',           "Doplním potřebné informace.", 'Spajdy'],
+			['novacek', 'Cesta ke slibu', 'Zážitek',               "Vzpomenu si na nejlepší zážitek, který jsem ve smečce dosud zažil. Zážitek řeknu šestce a nakreslím nebo nalepím fotku.", 'Pivoňka'],
+			['novacek', 'Cesta ke slibu', 'Pravidla smečky',       "Jaká pravidla bych měl ve své smečce dodržovat?", 'Spajdy'],
+			['novacek', 'Cesta ke slibu', 'Pozdravy',              "Podám si levou ruku se všemi členy své šestky, kteří jsou právě přítomní.\nNajdu na obrázku táborového nástupu pozdrav vlčat, světlušek, skautů a skautek.", 'Spajdy'],
+			['novacek', 'Cesta ke slibu', 'Znak vlčat',            "Vybarvím si znak vlčat a spojím, co znamenají jednotlivé části.", 'Spajdy'],
+			['novacek', 'Cesta ke slibu', 'Znaky',                 "Projdu bludištěm a přiřadím názvy k jednotlivým znakům.", 'Spajdy'],
+			['novacek', 'Cesta ke slibu', 'Skautský kroj',         "Na vyznačená místa na kroji si nalepím jeho chybějící součásti. Doplním jméno naší obce, číslo smečky a barvu šestky.", 'Čert'],
+			['novacek', 'Cesta ke slibu', 'Zákon vlčat',           "Řeknu, jak se vlčata na obrázcích chovají podle zákona.", 'Spajdy'],
+			['novacek', 'Cesta ke slibu', 'Heslo vlčat',           "Nakreslím nebo napíšu, jak se řídím heslem.", 'Spajdy'],
+			['novacek', 'Cesta ke slibu', 'Denní příkaz vlčat',    "Podívám se na obrázky a řeknu, jaký dobrý skutek bych mohl vykonat.", 'Čert'],
+			['novacek', 'Cesta ke slibu', 'Co mě baví',            "Napíšu nebo nakreslím několik svých zájmů. Ostatním v šestce je představím.", 'Dustin'],
+			// 1. stupeň / Co umím a znám
+			['1', 'Co umím a znám', 'Ošetření',           "Ukážu, jak bych ošetřil drobnou řeznou ránu, puchýř a bodnutí hmyzem.", 'Čert'],
+			['1', 'Co umím a znám', 'Cena jídla',         "Zjistím, kolik stojí: Jablka 0,5 kg, Chleba, Čokoláda, Jogurt, Šunka, Mléko, Máslo, Rohlíky, Vejce.", 'Pivoňka'],
+			['1', 'Co umím a znám', 'Pohybové aktivity',  "Vyzkouším si dvě z těchto aktivit: opičí dráha, lanová překážka, plavání, kolo/koloběžka/brusle, švihadlo, házení a chytání míče.", 'Čert'],
+			['1', 'Co umím a znám', 'Tvoření',            "Splním jeden z úkolů: domeček z přírodnin, lodička z kůry/dřeva, obrázek z přírodnin, papírová skládanka, jiný výrobek.", 'Pivoňka'],
+			['1', 'Co umím a znám', 'Vyznačení trasy',    "Půjdu v přírodě po vyznačené trase. Poté si sám nebo s kamarádem vyzkouším značení stejným nebo jiným způsobem.", 'Dustin'],
+			['1', 'Co umím a znám', 'Tísňová čísla',      "K obrázkům doplním tísňová telefonní čísla a ostatním řeknu, kdy se používají.", 'Čert'],
+			['1', 'Co umím a znám', 'Kdo mi pomůže',      "Kdo mi poradí nebo pomůže, když se mně nebo kamarádovi něco stane?", 'Čert'],
+			// 1. stupeň / Kdo jsem
+			['1', 'Kdo jsem', 'Dobrý skutek',   "Vzpomenu si na dobrý skutek, který jsem v nedávné době vykonal, a popíšu ho ostatním.", 'Čert'],
+			['1', 'Kdo jsem', 'Chování',         "V příběhu najdu příklad správného a nesprávného chování a řeknu, jak ovlivnilo příběh.", 'Čert'],
+			['1', 'Kdo jsem', 'Strach',          "Napíšu, z čeho mám trochu strach. S vedoucím vymyslíme, jak bych se strachu mohl postavit.", 'Čert'],
+			// 1. stupeň / Moje kamarádství
+			['1', 'Moje kamarádství', 'Zážitek',          "Vzpomenu si na nedávný společný zážitek s kamarády, který mě potěšil.", 'Pivoňka'],
+			['1', 'Moje kamarádství', 'Dobré vlastnosti', "Řeknu dvěma kamarádům ze šestky, jaké jsou jejich dvě dobré vlastnosti.", 'Čert'],
+			['1', 'Moje kamarádství', 'Co jsem se naučil',"Napíšu dvě věci, které jsem se naučil od svých kamarádů.", 'Čert'],
+			// 1. stupeň / Můj domov
+			['1', 'Můj domov', 'Společné vyrábění', "Společně vyrobíme předmět pro šestku.", 'Pivoňka'],
+			['1', 'Můj domov', 'Pomáhám doma',      "Napíšu, nakreslím, vyfotím nebo jinak ztvárním, jak doma pomáhám.", 'Dustin'],
+			['1', 'Můj domov', 'Hodnocení hry',     "Ohodnotím dvě hry pomocí smajlíka a napíšu nebo nakreslím, jak se mi líbily.", 'Pivoňka'],
+			// 1. stupeň / Svět okolo nás
+			['1', 'Svět okolo nás', 'Skautské symboly', "Vyberu si jeden ze skautských symbolů, zjistím jeho význam a ztvárním ho.", 'Pivoňka'],
+			['1', 'Svět okolo nás', 'Pravidla',         "Splním jeden z úkolů: zapojím se do vytváření pravidel šestky, nebo zahrajeme scénky ukazující, proč pravidla dodržovat.", 'Spajdy'],
+			['1', 'Svět okolo nás', 'Cesta jídla',      "Každý výrobek spojím s místy, kde se během výroby ocitne.", 'Dustin'],
+			// 1. stupeň / Příroda kolem nás
+			['1', 'Příroda kolem nás', 'Pozorování přírody', "Splním jeden z úkolů: nakreslím místo ve čtyřech ročních obdobích; pojmenuji tři zvuky v přírodě; pojmenuji mraky; pozoruji hvězdy a zjistím název souhvězdí.", 'Dustin'],
+			['1', 'Příroda kolem nás', 'Nástrahy lesa',      "Pojmenuji plody a houby na obrázcích a zaškrtnu, jestli jsou jedlé nebo jedovaté.", 'Pivoňka'],
+			['1', 'Příroda kolem nás', 'Zvířata',            "Pojmenuji zvířata na obrázcích a přiřadím je k prostředí. Na výpravě zakroužkuji vše, co jsem viděl.", 'Dustin'],
+			// 2. stupeň / Co umím a znám
+			['2', 'Co umím a znám', 'Ošetřování',       "Ukážu, jak bych ošetřil odřeninu, drobnou popáleninu a zvrtnutý kotník.", 'Čert'],
+			['2', 'Co umím a znám', 'Vím, co dělat',    "Řeknu, co bych dělal v uvedených situacích nebo koho bych poprosil o pomoc. Jednu situaci ztvárním scénkou.", 'Čert'],
+			['2', 'Co umím a znám', 'Jednohubky',        "Se šestkou nakoupíme suroviny a připravíme jednohubky nebo obložený chléb.", 'Pivoňka'],
+			['2', 'Co umím a znám', 'Spojení na dálku',  "Splním dva úkoly: zavolám vedoucímu; pošlu zprávu kamarádovi; představím komunikační aplikaci; napíšu e-mail; napíšu a odešlu pohled nebo dopis.", 'Spajdy'],
+			['2', 'Co umím a znám', 'Oheň',              "Pomůžu připravit oheň, zapálím ho a udržuji. Po ohni pomůžu uklidit.", 'Čert'],
+			['2', 'Co umím a znám', 'Orientace na mapě', "Zorientuji mapu (podle buzoly, orientačních bodů) a ukážu svou polohu na mapě.", 'Dustin'],
+			// 2. stupeň / Kdo jsem
+			['2', 'Kdo jsem', 'Radost',        "Řeknu nebo napíšu, co mi dělá radost.", 'Pivoňka'],
+			['2', 'Kdo jsem', 'Naslouchání',   "Pět minut naslouchám svému okolí a myšlenkám. Šestce řeknu, co jsem slyšel.", 'Pivoňka'],
+			['2', 'Kdo jsem', 'Krása',         "Ukážu šestce písničku, básničku nebo obrázek, který mi přijde krásný.", 'Pivoňka'],
+			['2', 'Kdo jsem', 'Jak se zachovat',"Ztvárníme scénky ze situací (rozbití vázy, polévka, láhev v lese, pomeranče...). Poté řekneme, jestli jsme se zachovali podle vlčáckého zákona.", 'Spajdy'],
+			['2', 'Kdo jsem', 'Řeč těla',      "Popíšu, co vyjadřují obrázky.", 'Pivoňka'],
+			['2', 'Kdo jsem', 'Překonej se!',  "Řeknu šestce, kdy a jak jsem se překonal a co mi k tomu pomohlo.", 'Dustin'],
+			// 2. stupeň / Moje kamarádství
+			['2', 'Moje kamarádství', 'Jak se k sobě chováme', "Ztvárním, co se mi líbí na našem vzájemném chování v šestce.", 'Pivoňka'],
+			['2', 'Moje kamarádství', 'Důvěra',                "Řeknu nebo napíšu, komu nejvíce důvěřuji a proč.", 'Čert'],
+			['2', 'Moje kamarádství', 'Dělám radost',          "Udělám někomu radost.", 'Čert'],
+			// 2. stupeň / Můj domov
+			['2', 'Můj domov', 'Moje rodina',       "Spolu s rodiči nebo sourozenci vyberu fotku nebo věc, která vystihuje naši rodinu.", 'Čert'],
+			['2', 'Můj domov', 'Hodnocení výpravy', "Se šestkou zahrajeme scénku nebo nakreslíme, co se nám líbilo a nelíbilo na výpravě.", 'Pivoňka'],
+			// 2. stupeň / Svět okolo nás
+			['2', 'Svět okolo nás', 'Zajímavost v okolí', "Představím šestce zajímavost z naší obce či okolí.", 'Dustin'],
+			['2', 'Svět okolo nás', 'Původ věcí',         "Do tabulky zapíšu věci a zjistím, z jaké země pocházejí (potravina, oblečení, hračka).", 'Dustin'],
+			['2', 'Svět okolo nás', 'Jedinečnost',        "Co máme společného v šestce? U každého řeknu, v čem je jedinečný.", 'Spajdy'],
+			['2', 'Svět okolo nás', 'Správné chování',    "Jak by se postavy na obrázcích měly správně zachovat? Do bublin doplním, co by říkaly.", 'Čert'],
+			['2', 'Svět okolo nás', 'Tábor',              "Splním jeden z úkolů: namaluji nebo popíšu náš tábor a porovnám ho s táborem na fotce.", 'Čert'],
+			['2', 'Svět okolo nás', 'Šetrné chování',     "Splním jeden z úkolů: šetřím vodou; svačina bez obalů; uklidíme nepořádek a roztřídíme odpadky.", 'Dustin'],
+			['2', 'Svět okolo nás', 'Stromy',             "Pojmenuji stromy, obtisknu jejich listy a dopíšu názvy.", 'Dustin'],
+			['2', 'Svět okolo nás', 'Výprava do přírody', "Se smečkou nebo rodinou se vydáme na dobrodružnou expedici někam, kde jsem ještě nebyl.", 'Dustin'],
+			// 3. stupeň / Co umím a znám
+			['3', 'Co umím a znám', 'Bezpečná cesta',        "Provedu bezpečně ostatní okolo obce, poukážu na nebezpečí a vysvětlím dopravní značky.", 'Dustin'],
+			['3', 'Co umím a znám', 'Co si koupím?',          "Napíšu, co bych si chtěl koupit. Zakroužkuji užitečné věci a škrtnu ty, které mohu odepřít.", 'Pivoňka'],
+			['3', 'Co umím a znám', 'První pomoc',            "Co udělám, když najdu někoho blízkého nehybně ležet? Seřadím kroky správně.", 'Čert'],
+			['3', 'Co umím a znám', 'Přivolání pomoci',       "V hraném telefonátu si vyzkouším přivolat pomoc k různým situacím.", 'Čert'],
+			['3', 'Co umím a znám', 'Vyhledávání informací',  "Vyberu otázku, najdu odpovědi ve dvou různých zdrojích a výsledky porovnám.", 'Dustin'],
+			['3', 'Co umím a znám', 'Pracuji na sobě',        "Po domluvě s vedoucím vydržím tři dny bez dohodnuté věci (sladkosti, obrazovka...).", 'Dustin'],
+			// 3. stupeň / Kdo jsem
+			['3', 'Kdo jsem', 'Dodržování slibu', "Jeden den se soustředím na dodržování vlčáckého slibu. Večer se zamyslím, jak se mi dařilo.", 'Čert'],
+			['3', 'Kdo jsem', 'Beze slov',        "Předvedu, jak bych beze slov vyjádřil tři z daných pocitů.", 'Pivoňka'],
+			['3', 'Kdo jsem', 'Důvěra',           "Napíšu, proč si myslím, že mi rodina a kamarádi můžou důvěřovat.", 'Čert'],
+			['3', 'Kdo jsem', 'Písnička',         "Se zavřenýma očima si se šestkou poslechneme písničku a řekneme, co se nám líbilo.", 'Dustin'],
+			['3', 'Kdo jsem', 'Dobré vlastnosti', "Napíšu tři své dobré vlastnosti.", 'Pivoňka'],
+			['3', 'Kdo jsem', 'Chci se zlepšit',  "Vyberu si jednu věc, ve které se chci zlepšit, a na konci období řeknu, jak se mi to povedlo.", 'Čert'],
+			// 3. stupeň / Moje kamarádství
+			['3', 'Moje kamarádství', 'Naučím něco užitečného', "Zkusím brášku ze smečky naučit něco, co ještě nedělal (uvázat dobráček, ořezat klacek, škrtnout sirkou...).", 'Pivoňka'],
+			['3', 'Moje kamarádství', 'Společenská hra',         "Spolu s kamarádem nebo kamarádkou si zahrajeme deskovou nebo karetní hru.", 'Pivoňka'],
+			['3', 'Moje kamarádství', 'Spor',                    "Vzpomenu si na situaci, ve které se podařilo vyřešit spor. Co bylo pro řešení důležité?", 'Spajdy'],
+			// 3. stupeň / Můj domov
+			['3', 'Můj domov', 'Moji předkové', "Zeptám se rodičů na jednoho z předků. Jakou měl práci, co ho bavilo? Řeknu šestce, co mě zaujalo.", 'Čert'],
+			['3', 'Můj domov', 'Příprava hry',   "Po domluvě s vedoucím připravím krátkou hru pro šestku. Na konci mi ostatní řeknou, co se jim líbilo.", 'Pivoňka'],
+			// 3. stupeň / Svět okolo nás
+			['3', 'Svět okolo nás', 'Historie skautingu', "Se šestkou zahrajeme scénku z historie skautingu (světového, českého nebo místního).", 'Pivoňka'],
+			['3', 'Svět okolo nás', 'Zájem o obec',       "Splním jeden z úkolů: zúčastním se akce pro veřejnost; nafotím změnu v obci; navrhnu co zlepšit; převyprávím pověst z naší obce.", 'Spajdy'],
+			['3', 'Svět okolo nás', 'Spravedlnost',       "Vyberu si příběh a najdu, kdo rozhodl spravedlivě a kdo nespravedlivě.", 'Spajdy'],
+			['3', 'Svět okolo nás', 'Domlouvání programu',"V šestce navrhneme, jaký program by se nám líbil. Vybereme pět nápadů a řekneme je vedoucímu.", 'Spajdy'],
+			['3', 'Svět okolo nás', 'Výroba věci',        "Vyberu si předmět a řeknu, z čeho je vyrobený a kolika lidí se dotkl, než se dostal ke mně.", 'Dustin'],
+			// 3. stupeň / Příroda kolem nás
+			['3', 'Příroda kolem nás', 'Změny v přírodě',    "Na starých fotkách si vyberu jedno místo, zajdu se na něj podívat a popíšu, jak se změnilo.", 'Dustin'],
+			['3', 'Příroda kolem nás', 'Květiny',             "Vybarvím a pojmenuji květiny na obrázcích. Zakroužkuji ty, které jsem našel na výpravě.", 'Dustin'],
+			['3', 'Příroda kolem nás', 'Pozorování přírody',  "Splním jeden z úkolů: zapíšu rostliny a živočichy z jednoho prostředí; najdu zvířecí stopy; prozkoumám suchý strom.", 'Dustin'],
+			['3', 'Příroda kolem nás', 'Krása přírody',       "Splním jeden z úkolů: najdu zajímavou přírodninu a pojmenuji ji; vytvořím sbírku přírodnin; najdu přírodniny v co nejvíce barvách.", 'Pivoňka'],
+		];
 	}
 
 	private function migrate_obrazky_v4(): void {
@@ -232,6 +393,37 @@ class VlcciOdborky {
 			datum_predani date NOT NULL,
 			PRIMARY KEY (id),
 			UNIQUE KEY dite_odborka (dite_id, odborka_id)
+		) $c;" );
+
+		dbDelta( "CREATE TABLE {$wpdb->prefix}vo_stezky_kompetence (
+			id int NOT NULL AUTO_INCREMENT,
+			stupen enum('novacek','1','2','3') NOT NULL,
+			oblast varchar(200) NOT NULL,
+			okruh varchar(200) NOT NULL,
+			popis text,
+			garant varchar(100) DEFAULT NULL,
+			poradi int NOT NULL DEFAULT 0,
+			PRIMARY KEY (id)
+		) $c;" );
+
+		dbDelta( "CREATE TABLE {$wpdb->prefix}vo_stezky_plneni (
+			id int NOT NULL AUTO_INCREMENT,
+			dite_id int NOT NULL,
+			kompetence_id int NOT NULL,
+			datum date NOT NULL,
+			poznamka text,
+			vedouci_id int NOT NULL,
+			PRIMARY KEY (id),
+			UNIQUE KEY dite_kompetence (dite_id, kompetence_id)
+		) $c;" );
+
+		dbDelta( "CREATE TABLE {$wpdb->prefix}vo_stezky_milniky (
+			id int NOT NULL AUTO_INCREMENT,
+			dite_id int NOT NULL,
+			typ enum('slib','nasivka_1','nasivka_2','nasivka_3') NOT NULL,
+			datum date NOT NULL,
+			PRIMARY KEY (id),
+			UNIQUE KEY dite_typ (dite_id, typ)
 		) $c;" );
 
 		dbDelta( "CREATE TABLE {$wpdb->prefix}vo_plneni (
@@ -1681,7 +1873,7 @@ class VlcciOdborky {
 	}
 
 	private function app_redirect( string $base_url, string $page, array $extra = [] ): void {
-		$clean = remove_query_arg( [ 'vo', 'dite_id', 'odborka_id', 'sestka_id', 'oddil_id', 'edit_id', 'edit_o', 'edit_s', 'ukol_id' ], $base_url );
+		$clean = remove_query_arg( [ 'vo', 'dite_id', 'odborka_id', 'sestka_id', 'oddil_id', 'edit_id', 'edit_o', 'edit_s', 'ukol_id', 'kompetence_id', 'byvali' ], $base_url );
 		wp_safe_redirect( add_query_arg( array_merge( [ 'vo' => $page ], $extra ), $clean ) );
 		exit;
 	}
@@ -1714,6 +1906,12 @@ class VlcciOdborky {
 			case 'delete_plneni_odborka':  $this->app_do_delete_plneni_odborka( $base );  break;
 			case 'pridat_bez_data':        $this->app_do_pridat_bez_data( $base );        break;
 			case 'predat_nasivku':         $this->app_do_predat_nasivku( $base );         break;
+			case 'save_stezka_plneni':     $this->app_do_save_stezka_plneni( $base );     break;
+			case 'delete_stezka_plneni':   $this->app_do_delete_stezka_plneni( $base );   break;
+			case 'hromadne_stezka':        $this->app_do_hromadne_stezka( $base );        break;
+			case 'save_stezka_milnik':     $this->app_do_save_stezka_milnik( $base );     break;
+			case 'delete_stezka_milnik':   $this->app_do_delete_stezka_milnik( $base );   break;
+			case 'save_stezka_garant':     $this->app_do_save_stezka_garant( $base );     break;
 		}
 	}
 
@@ -1929,6 +2127,8 @@ class VlcciOdborky {
 			case 'po_detech':     $this->app_page_po_detech();     break;
 			case 'po_odborkach':  $this->app_page_po_odborkach();  break;
 			case 'nasivky':       $this->app_page_nasivky();       break;
+			case 'stezky':        $this->app_page_stezky();        break;
+			case 'stezka_dite':   $this->app_page_stezka_dite();   break;
 			case 'ukoly':         $this->app_page_ukoly();         break;
 			case 'deti':          $this->app_page_deti();          break;
 			case 'oddily':        $this->app_page_oddily();        break;
@@ -1947,6 +2147,7 @@ class VlcciOdborky {
 			'po_detech'    => '👤 Po jménech',
 			'po_odborkach' => '🏅 Po odborkách',
 			'nasivky'      => '📦 Nášivky',
+			'stezky'       => '🗺️ Stezky',
 			'ukoly'        => '📋 Úkoly',
 			'deti'         => '🧑‍🤝‍🧑 Správa členů',
 			'napoveda'     => '❓ Nápověda',
@@ -1966,6 +2167,357 @@ class VlcciOdborky {
 	}
 
 	// ── APP PAGES ─────────────────────────────────────────────────────────────
+
+	// ── STEZKY POST HANDLERS ────────────────────────────────────────────────
+
+	private function app_do_save_stezka_plneni( string $base ): void {
+		global $wpdb;
+		$dite_id       = intval( $_POST['dite_id'] ?? 0 );
+		$kompetence_id = intval( $_POST['kompetence_id'] ?? 0 );
+		$d = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE id=%d", $dite_id ) );
+		if ( ! $d || ! $this->can_edit_sestka( (int) $d->sestka_id ) ) wp_die( 'Přístup odepřen.' );
+		$datum    = sanitize_text_field( $_POST['datum'] ?? gmdate( 'Y-m-d' ) ) ?: gmdate( 'Y-m-d' );
+		$poznamka = sanitize_textarea_field( $_POST['poznamka'] ?? '' );
+		$wpdb->query( $wpdb->prepare(
+			"INSERT INTO {$wpdb->prefix}vo_stezky_plneni (dite_id,kompetence_id,datum,poznamka,vedouci_id)
+			 VALUES (%d,%d,%s,%s,%d)
+			 ON DUPLICATE KEY UPDATE datum=%s, poznamka=%s, vedouci_id=%d",
+			$dite_id, $kompetence_id, $datum, $poznamka, get_current_user_id(),
+			$datum, $poznamka, get_current_user_id()
+		) );
+		$this->app_set_flash( 'Kompetence uložena.' );
+		$this->app_redirect( $base, 'stezka_dite', [ 'dite_id' => $dite_id ] );
+	}
+
+	private function app_do_delete_stezka_plneni( string $base ): void {
+		global $wpdb;
+		$dite_id       = intval( $_POST['dite_id'] ?? 0 );
+		$kompetence_id = intval( $_POST['kompetence_id'] ?? 0 );
+		$d = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE id=%d", $dite_id ) );
+		if ( ! $d || ! $this->can_edit_sestka( (int) $d->sestka_id ) ) wp_die( 'Přístup odepřen.' );
+		$wpdb->delete( "{$wpdb->prefix}vo_stezky_plneni", [ 'dite_id' => $dite_id, 'kompetence_id' => $kompetence_id ] );
+		$this->app_set_flash( 'Plnění zrušeno.' );
+		$this->app_redirect( $base, 'stezka_dite', [ 'dite_id' => $dite_id ] );
+	}
+
+	private function app_do_hromadne_stezka( string $base ): void {
+		global $wpdb;
+		$sestka_id     = intval( $_POST['sestka_id'] ?? 0 );
+		$kompetence_id = intval( $_POST['kompetence_id'] ?? 0 );
+		if ( ! $this->can_edit_sestka( $sestka_id ) ) wp_die( 'Přístup odepřen.' );
+		$datum    = gmdate( 'Y-m-d' );
+		$vedouci  = get_current_user_id();
+		$deti = $wpdb->get_results( $wpdb->prepare(
+			"SELECT id FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 AND clen_typ='vlce'", $sestka_id
+		) );
+		foreach ( $deti as $d ) {
+			$wpdb->query( $wpdb->prepare(
+				"INSERT IGNORE INTO {$wpdb->prefix}vo_stezky_plneni (dite_id,kompetence_id,datum,poznamka,vedouci_id) VALUES (%d,%d,%s,'',%d)",
+				$d->id, $kompetence_id, $datum, $vedouci
+			) );
+		}
+		$this->app_set_flash( 'Kompetence uznána všem vlčatům šestky.' );
+		$this->app_redirect( $base, 'stezky', [ 'sestka_id' => $sestka_id ] );
+	}
+
+	private function app_do_save_stezka_milnik( string $base ): void {
+		global $wpdb;
+		$dite_id = intval( $_POST['dite_id'] ?? 0 );
+		$typ     = sanitize_key( $_POST['typ'] ?? '' );
+		$valid   = [ 'slib', 'nasivka_1', 'nasivka_2', 'nasivka_3' ];
+		if ( ! in_array( $typ, $valid, true ) ) wp_die( 'Neplatný typ.' );
+		$d = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE id=%d", $dite_id ) );
+		if ( ! $d || ! $this->can_edit_sestka( (int) $d->sestka_id ) ) wp_die( 'Přístup odepřen.' );
+		$datum = sanitize_text_field( $_POST['datum'] ?? gmdate( 'Y-m-d' ) ) ?: gmdate( 'Y-m-d' );
+		$wpdb->query( $wpdb->prepare(
+			"INSERT INTO {$wpdb->prefix}vo_stezky_milniky (dite_id,typ,datum) VALUES (%d,%s,%s)
+			 ON DUPLICATE KEY UPDATE datum=%s",
+			$dite_id, $typ, $datum, $datum
+		) );
+		$this->app_set_flash( 'Milník uložen.' );
+		$this->app_redirect( $base, 'stezka_dite', [ 'dite_id' => $dite_id ] );
+	}
+
+	private function app_do_delete_stezka_milnik( string $base ): void {
+		global $wpdb;
+		$dite_id = intval( $_POST['dite_id'] ?? 0 );
+		$typ     = sanitize_key( $_POST['typ'] ?? '' );
+		$d = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE id=%d", $dite_id ) );
+		if ( ! $d || ! $this->can_edit_sestka( (int) $d->sestka_id ) ) wp_die( 'Přístup odepřen.' );
+		$wpdb->delete( "{$wpdb->prefix}vo_stezky_milniky", [ 'dite_id' => $dite_id, 'typ' => $typ ] );
+		$this->app_set_flash( 'Milník zrušen.' );
+		$this->app_redirect( $base, 'stezka_dite', [ 'dite_id' => $dite_id ] );
+	}
+
+	private function app_do_save_stezka_garant( string $base ): void {
+		if ( ! $this->is_admin() ) wp_die( 'Přístup odepřen.' );
+		global $wpdb;
+		$id     = intval( $_POST['kompetence_id'] ?? 0 );
+		$garant = sanitize_text_field( $_POST['garant'] ?? '' );
+		$wpdb->update( "{$wpdb->prefix}vo_stezky_kompetence", [ 'garant' => $garant ], [ 'id' => $id ] );
+		$this->app_set_flash( 'Garant upraven.' );
+		$this->app_redirect( $base, 'stezky' );
+	}
+
+	// ── STEZKY PAGES ─────────────────────────────────────────────────────────
+
+	private function stezky_stupne(): array {
+		return [
+			'novacek' => 'Nováček',
+			'1'       => '1. stupeň',
+			'2'       => '2. stupeň',
+			'3'       => '3. stupeň',
+		];
+	}
+
+	private function stezky_progress( int $dite_id, string $stupen ): array {
+		global $wpdb;
+		$total = (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_kompetence WHERE stupen=%s", $stupen
+		) );
+		$done = (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_plneni sp
+			 JOIN {$wpdb->prefix}vo_stezky_kompetence k ON k.id=sp.kompetence_id
+			 WHERE sp.dite_id=%d AND k.stupen=%s", $dite_id, $stupen
+		) );
+		return [ 'total' => $total, 'done' => $done, 'splneno' => $done >= $total && $total > 0 ];
+	}
+
+	private function app_page_stezky(): void {
+		global $wpdb;
+		$all_sestky = $wpdb->get_results(
+			"SELECT s.id, s.nazev, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_sestky s
+			 JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id ORDER BY o.nazev, s.nazev"
+		) ?: [];
+		$vlcata_sestky = array_filter( $all_sestky, function( $s ) {
+			return $s->typ === 'vlcata' || $this->is_admin();
+		} );
+		if ( ! $this->is_admin() ) {
+			$vlcata_sestky = array_filter( $vlcata_sestky, fn($s) => $this->can_edit_sestka( (int)$s->id ) );
+		}
+		$sestka_id = intval( $_GET['sestka_id'] ?? 0 );
+		if ( ! $sestka_id && ! empty( $vlcata_sestky ) ) {
+			$first = reset( $vlcata_sestky );
+			$sestka_id = (int) $first->id;
+		}
+		echo '<h1 class="voa-page-title">🗺️ Stezky vlčat</h1>';
+		if ( empty( $vlcata_sestky ) ) {
+			echo '<div class="voa-empty">Žádné šestky vlčat.</div>'; return;
+		}
+		echo '<div class="voa-tabs">';
+		foreach ( $vlcata_sestky as $s ) {
+			$active = (int)$s->id === $sestka_id ? ' voa-tab--active' : '';
+			echo '<a href="' . esc_url( $this->app_url( 'stezky', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-tab' . $active . '">' . esc_html( $s->oddil_nazev . ' — ' . $s->nazev ) . '</a>';
+		}
+		echo '</div>';
+		if ( ! $sestka_id ) return;
+		$deti = $wpdb->get_results( $wpdb->prepare(
+			"SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 AND clen_typ='vlce' ORDER BY prijmeni, jmeno", $sestka_id
+		) ) ?: [];
+		if ( empty( $deti ) ) {
+			echo '<div class="voa-empty">V této šestce nejsou žádná aktivní vlčata.</div>'; return;
+		}
+		$stupne  = $this->stezky_stupne();
+		$can_edit = $this->can_edit_sestka( $sestka_id );
+		echo '<div class="voa-card" style="overflow-x:auto"><table class="voa-table">';
+		echo '<thead><tr><th>Vlče</th>';
+		foreach ( $stupne as $sk => $sl ) echo '<th>' . esc_html( $sl ) . '</th>';
+		echo '<th></th></tr></thead><tbody>';
+		foreach ( $deti as $d ) {
+			$milniky = $wpdb->get_results( $wpdb->prepare(
+				"SELECT typ, datum FROM {$wpdb->prefix}vo_stezky_milniky WHERE dite_id=%d", $d->id
+			) ) ?: [];
+			$m = [];
+			foreach ( $milniky as $mk ) $m[ $mk->typ ] = $mk->datum;
+			$nov = $this->stezky_progress( (int)$d->id, 'novacek' );
+			echo '<tr><td><strong>' . esc_html( $d->prezdivka ) . '</strong><br><span class="voa-muted">' . esc_html( $d->prijmeni . ' ' . $d->jmeno ) . '</span></td>';
+			foreach ( $stupne as $sk => $sl ) {
+				$p = $this->stezky_progress( (int)$d->id, $sk );
+				$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
+				if ( $p['splneno'] ) {
+					echo '<td>✅ ' . $p['done'] . '/' . $p['total'] . '</td>';
+				} else {
+					echo '<td><div class="voa-progress-bar-wrap voa-progress-bar-wrap--md"><div class="voa-progress-bar-fill voa-progress-bar-fill--orange" style="width:' . $pct . '%"></div></div><span class="voa-progress-text">' . $p['done'] . '/' . $p['total'] . '</span></td>';
+				}
+			}
+			$badges = '';
+			if ( $nov['splneno'] && ! isset( $m['slib'] ) ) $badges .= ' <span class="voa-badge voa-badge--yellow">⚡ Může skládat slib</span>';
+			if ( isset( $m['slib'] ) ) $badges .= ' <span class="voa-badge voa-badge--green">📜 Slib ' . esc_html( $m['slib'] ) . '</span>';
+			foreach ( [ '1' => 'nasivka_1', '2' => 'nasivka_2', '3' => 'nasivka_3' ] as $st => $mtyp ) {
+				$pr = $this->stezky_progress( (int)$d->id, $st );
+				if ( $pr['splneno'] && ! isset( $m[ $mtyp ] ) ) $badges .= ' <span class="voa-badge voa-badge--yellow">⚡ Nášivka ' . $st . '. st.</span>';
+				if ( isset( $m[ $mtyp ] ) ) $badges .= ' <span class="voa-badge voa-badge--green">🏅 Nášivka ' . $st . '. st. ' . esc_html( $m[ $mtyp ] ) . '</span>';
+			}
+			echo '<td>' . $badges . ' <a href="' . esc_url( $this->app_url( 'stezka_dite', [ 'dite_id' => $d->id ] ) ) . '" class="voa-link">Detail</a></td></tr>';
+		}
+		echo '</tbody></table></div>';
+		if ( $can_edit ) {
+			echo '<details class="voa-card" style="margin-top:16px"><summary style="cursor:pointer;font-weight:600;padding:8px 0">⚙️ Správa kompetencí (hromadné uznání, garanti)</summary>';
+			$this->app_stezky_sprava( $sestka_id );
+			echo '</details>';
+		}
+	}
+
+	private function app_stezky_sprava( int $sestka_id ): void {
+		global $wpdb;
+		$kompetence = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_stezky_kompetence ORDER BY poradi" ) ?: [];
+		$stupne = $this->stezky_stupne();
+		$by_stupen = [];
+		foreach ( $kompetence as $k ) $by_stupen[ $k->stupen ][] = $k;
+		foreach ( $stupne as $sk => $sl ) {
+			if ( empty( $by_stupen[ $sk ] ) ) continue;
+			echo '<h4 style="margin:16px 0 8px">' . esc_html( $sl ) . '</h4>';
+			echo '<table class="voa-table"><thead><tr><th>Oblast</th><th>Okruh</th><th>Garant</th><th>Hromadně uznat</th>' . ( $this->is_admin() ? '<th>Upravit</th>' : '' ) . '</tr></thead><tbody>';
+			foreach ( $by_stupen[ $sk ] as $k ) {
+				echo '<tr><td class="voa-muted">' . esc_html( $k->oblast ) . '</td><td>' . esc_html( $k->okruh ) . '</td>';
+				echo '<td>' . esc_html( $k->garant ?? '—' ) . '</td>';
+				echo '<td><form method="post" style="display:inline">' . $this->app_nonce( 'hromadne_stezka' ) . $this->app_base_field();
+				echo '<input type="hidden" name="_vo_app_action" value="hromadne_stezka">';
+				echo '<input type="hidden" name="sestka_id" value="' . $sestka_id . '">';
+				echo '<input type="hidden" name="kompetence_id" value="' . $k->id . '">';
+				echo '<button class="voa-btn voa-btn-sm voa-btn-secondary" onclick="return confirm(\'Uznat všem vlčatům šestky?\')">Uznat všem</button></form></td>';
+				if ( $this->is_admin() ) {
+					echo '<td><form method="post" style="display:inline;white-space:nowrap">' . $this->app_nonce( 'save_stezka_garant' ) . $this->app_base_field();
+					echo '<input type="hidden" name="_vo_app_action" value="save_stezka_garant">';
+					echo '<input type="hidden" name="kompetence_id" value="' . $k->id . '">';
+					echo '<input type="text" name="garant" value="' . esc_attr( $k->garant ?? '' ) . '" class="voa-input voa-input--sm" style="width:100px">';
+					echo ' <button class="voa-btn voa-btn-sm voa-btn-primary">OK</button></form></td>';
+				}
+				echo '</tr>';
+			}
+			echo '</tbody></table>';
+		}
+	}
+
+	private function app_page_stezka_dite(): void {
+		global $wpdb;
+		$dite_id = intval( $_GET['dite_id'] ?? 0 );
+		if ( ! $dite_id ) { echo '<div class="voa-empty">Vyberte vlče.</div>'; return; }
+		$d = $wpdb->get_row( $wpdb->prepare(
+			"SELECT d.*, s.nazev AS sestka_nazev, o.nazev AS oddil_nazev FROM {$wpdb->prefix}vo_deti d
+			 LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id
+			 LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE d.id=%d", $dite_id
+		) );
+		if ( ! $d ) { echo '<div class="voa-empty">Vlče nenalezeno.</div>'; return; }
+		if ( $d->clen_typ !== 'vlce' ) { echo '<div class="voa-empty">Stezky jsou dostupné pouze pro vlčata.</div>'; return; }
+		$can_edit = $this->can_edit_sestka( (int)$d->sestka_id );
+		$milniky_rows = $wpdb->get_results( $wpdb->prepare(
+			"SELECT typ, datum FROM {$wpdb->prefix}vo_stezky_milniky WHERE dite_id=%d", $dite_id
+		) ) ?: [];
+		$m = [];
+		foreach ( $milniky_rows as $mk ) $m[ $mk->typ ] = $mk->datum;
+		$plneni_rows = $wpdb->get_results( $wpdb->prepare(
+			"SELECT sp.kompetence_id, sp.datum, sp.poznamka FROM {$wpdb->prefix}vo_stezky_plneni sp WHERE sp.dite_id=%d", $dite_id
+		) ) ?: [];
+		$plneni = [];
+		foreach ( $plneni_rows as $p ) $plneni[ $p->kompetence_id ] = $p;
+		$kompetence = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_stezky_kompetence ORDER BY poradi" ) ?: [];
+		$stupne = $this->stezky_stupne();
+		echo '<div class="voa-page-header"><a href="' . esc_url( $this->app_url( 'stezky', [ 'sestka_id' => $d->sestka_id ] ) ) . '" class="voa-back">← Stezky</a>';
+		echo '<h1 class="voa-page-title" style="margin:4px 0">🗺️ ' . esc_html( $d->prezdivka ) . '</h1>';
+		echo '<p class="voa-muted">' . esc_html( $d->jmeno . ' ' . $d->prijmeni ) . ' — ' . esc_html( $d->oddil_nazev . ' / ' . $d->sestka_nazev ) . '</p></div>';
+		// souhrn stupňů
+		echo '<div class="voa-stezky-souhrn">';
+		$nov = $this->stezky_progress( $dite_id, 'novacek' );
+		foreach ( $stupne as $sk => $sl ) {
+			$p   = $this->stezky_progress( $dite_id, $sk );
+			$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
+			$cls = $p['splneno'] ? ' voa-stezky-card--done' : '';
+			echo '<div class="voa-stezky-card' . $cls . '"><div class="voa-stezky-card-title">' . esc_html( $sl ) . '</div>';
+			echo '<div class="voa-stezky-card-prog">' . $p['done'] . '/' . $p['total'] . '</div>';
+			echo '<div class="voa-progress-bar-wrap"><div class="voa-progress-bar-fill voa-progress-bar-fill--orange" style="width:' . $pct . '%"></div></div></div>';
+		}
+		echo '</div>';
+		// milníky
+		echo '<div class="voa-card" style="margin-bottom:20px"><h3 class="voa-card-title">🏆 Milníky</h3>';
+		$milniky_def = [
+			'slib'      => [ 'label' => 'Slib vlčete složen',   'unlock_stupen' => 'novacek' ],
+			'nasivka_1' => [ 'label' => 'Nášivka 1. stupně předána', 'unlock_stupen' => '1' ],
+			'nasivka_2' => [ 'label' => 'Nášivka 2. stupně předána', 'unlock_stupen' => '2' ],
+			'nasivka_3' => [ 'label' => 'Nášivka 3. stupně předána', 'unlock_stupen' => '3' ],
+		];
+		echo '<table class="voa-table"><thead><tr><th>Milník</th><th>Stav</th><th>Datum</th>' . ( $can_edit ? '<th></th>' : '' ) . '</tr></thead><tbody>';
+		foreach ( $milniky_def as $typ => $def ) {
+			$pr_unlock = $this->stezky_progress( $dite_id, $def['unlock_stupen'] );
+			$splneno_predpoklad = $pr_unlock['splneno'];
+			$zaznam = isset( $m[ $typ ] );
+			echo '<tr><td>' . esc_html( $def['label'] ) . '</td>';
+			if ( $zaznam ) {
+				echo '<td><span class="voa-badge voa-badge--green">✅ Zaznamenáno</span></td><td>' . esc_html( $m[ $typ ] ) . '</td>';
+				if ( $can_edit ) {
+					echo '<td><form method="post" style="display:inline">' . $this->app_nonce( 'delete_stezka_milnik' ) . $this->app_base_field();
+					echo '<input type="hidden" name="_vo_app_action" value="delete_stezka_milnik">';
+					echo '<input type="hidden" name="dite_id" value="' . $dite_id . '">';
+					echo '<input type="hidden" name="typ" value="' . $typ . '">';
+					echo '<button class="voa-btn voa-btn-sm voa-link-danger" onclick="return confirm(\'Zrušit milník?\')">Zrušit</button></form></td>';
+				}
+			} elseif ( $splneno_predpoklad ) {
+				echo '<td><span class="voa-badge voa-badge--yellow">⚡ Připraveno</span></td><td>';
+				if ( $can_edit ) {
+					echo '<form method="post" style="display:inline">' . $this->app_nonce( 'save_stezka_milnik' ) . $this->app_base_field();
+					echo '<input type="hidden" name="_vo_app_action" value="save_stezka_milnik">';
+					echo '<input type="hidden" name="dite_id" value="' . $dite_id . '">';
+					echo '<input type="hidden" name="typ" value="' . $typ . '">';
+					echo '<input type="date" name="datum" value="' . gmdate( 'Y-m-d' ) . '" class="voa-input voa-input--sm">';
+					echo ' <button class="voa-btn voa-btn-sm voa-btn-primary">Zaznamenat</button></form>';
+				}
+				echo '</td>';
+				if ( $can_edit ) echo '<td></td>';
+			} else {
+				$stav_label = $def['unlock_stupen'] === 'novacek' ? 'Nejprve splnit Nováčka' : 'Nejprve splnit ' . $def['unlock_stupen'] . '. stupeň';
+				echo '<td><span class="voa-muted">⏳ ' . esc_html( $stav_label ) . '</span></td><td>—</td>';
+				if ( $can_edit ) echo '<td></td>';
+			}
+			echo '</tr>';
+		}
+		echo '</tbody></table></div>';
+		// kompetence po stupních
+		$by_stupen = [];
+		foreach ( $kompetence as $k ) $by_stupen[ $k->stupen ][] = $k;
+		foreach ( $stupne as $sk => $sl ) {
+			if ( empty( $by_stupen[ $sk ] ) ) continue;
+			$p_st = $this->stezky_progress( $dite_id, $sk );
+			echo '<div class="voa-card" style="margin-bottom:20px"><h3 class="voa-card-title">' . esc_html( $sl ) . ' — ' . $p_st['done'] . '/' . $p_st['total'] . ( $p_st['splneno'] ? ' ✅' : '' ) . '</h3>';
+			$by_oblast = [];
+			foreach ( $by_stupen[ $sk ] as $k ) $by_oblast[ $k->oblast ][] = $k;
+			foreach ( $by_oblast as $oblast => $klist ) {
+				echo '<h4 style="margin:16px 0 8px;color:#555">' . esc_html( $oblast ) . '</h4>';
+				foreach ( $klist as $k ) {
+					$splneno = isset( $plneni[ $k->id ] );
+					$pr      = $splneno ? $plneni[ $k->id ] : null;
+					echo '<div class="voa-stezka-kompetence' . ( $splneno ? ' voa-stezka-kompetence--done' : '' ) . '">';
+					echo '<div class="voa-stezka-komp-head">';
+					echo '<span class="voa-stezka-komp-check">' . ( $splneno ? '✅' : '⬜' ) . '</span>';
+					echo '<strong>' . esc_html( $k->okruh ) . '</strong>';
+					if ( $k->garant ) echo ' <span class="voa-muted" style="font-size:12px">(' . esc_html( $k->garant ) . ')</span>';
+					echo '</div>';
+					if ( $k->popis ) {
+						echo '<details class="voa-stezka-popis"><summary>Popis</summary><p>' . nl2br( esc_html( $k->popis ) ) . '</p></details>';
+					}
+					if ( $splneno ) {
+						echo '<div class="voa-stezka-meta">Splněno: ' . esc_html( $pr->datum ) . ( $pr->poznamka ? ' · ' . esc_html( $pr->poznamka ) : '' ) . '</div>';
+						if ( $can_edit ) {
+							echo '<form method="post" style="display:inline">' . $this->app_nonce( 'delete_stezka_plneni' ) . $this->app_base_field();
+							echo '<input type="hidden" name="_vo_app_action" value="delete_stezka_plneni">';
+							echo '<input type="hidden" name="dite_id" value="' . $dite_id . '">';
+							echo '<input type="hidden" name="kompetence_id" value="' . $k->id . '">';
+							echo '<button class="voa-btn voa-btn-sm voa-link-danger" onclick="return confirm(\'Zrušit splnění?\')">Zrušit</button></form>';
+						}
+					} elseif ( $can_edit ) {
+						echo '<form method="post" class="voa-stezka-form">' . $this->app_nonce( 'save_stezka_plneni' ) . $this->app_base_field();
+						echo '<input type="hidden" name="_vo_app_action" value="save_stezka_plneni">';
+						echo '<input type="hidden" name="dite_id" value="' . $dite_id . '">';
+						echo '<input type="hidden" name="kompetence_id" value="' . $k->id . '">';
+						echo '<input type="date" name="datum" value="' . gmdate( 'Y-m-d' ) . '" class="voa-input voa-input--sm">';
+						echo '<input type="text" name="poznamka" placeholder="Poznámka (nepovinné)" class="voa-input voa-input--sm" style="flex:1">';
+						echo '<button class="voa-btn voa-btn-sm voa-btn-primary">✓ Splněno</button></form>';
+					}
+					echo '</div>';
+				}
+			}
+			echo '</div>';
+		}
+	}
 
 	private function app_page_napoveda(): void {
 		echo '<h1 class="voa-page-title">Nápověda</h1>';
@@ -3135,6 +3687,26 @@ class VlcciOdborky {
 .voa-nasivka-status{margin-top:8px;padding:6px 10px;border-radius:4px;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
 .voa-nasivka-status--predana{background:#d1e7dd;color:#0a5b2e}
 .voa-nasivka-status--pending{background:#fff3cd;color:#856404}
+/* Stezky */
+.voa-stezky-souhrn{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}
+.voa-stezky-card{flex:1;min-width:130px;padding:12px 14px;background:#fff;border:1px solid #ddd;border-radius:6px}
+.voa-stezky-card--done{border-color:#1a5c2a;background:#f0faf0}
+.voa-stezky-card-title{font-weight:600;font-size:13px;margin-bottom:4px}
+.voa-stezky-card-prog{font-size:18px;font-weight:700;color:#1a5c2a;margin-bottom:4px}
+.voa-stezka-kompetence{padding:10px 12px;border-radius:4px;border:1px solid #eee;margin-bottom:8px;background:#fafafa}
+.voa-stezka-kompetence--done{background:#f0faf0;border-color:#b8d4be}
+.voa-stezka-komp-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.voa-stezka-komp-check{font-size:16px}
+.voa-stezka-meta{font-size:12px;color:#666;margin:4px 0}
+.voa-stezka-popis{font-size:12px;color:#555;margin:4px 0}
+.voa-stezka-popis summary{cursor:pointer;color:#1a5c2a}
+.voa-stezka-popis p{margin:4px 0 0;white-space:pre-line}
+.voa-stezka-form{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}
+.voa-badge{display:inline-block;font-size:11px;padding:2px 7px;border-radius:10px;font-weight:600;white-space:nowrap}
+.voa-badge--green{background:#d1e7dd;color:#0a5b2e}
+.voa-badge--yellow{background:#fff3cd;color:#856404}
+.voa-btn-sm{font-size:12px;padding:3px 10px}
+.voa-input--sm{font-size:12px;padding:3px 7px;height:auto}
 /* Po dětech */
 .voa-odborky-row{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0 4px}
 .voa-odborka-mini{display:flex;flex-direction:column;align-items:center;text-align:center;width:86px;padding:7px 5px;background:#fff;border:1px solid #ddd;border-radius:4px;text-decoration:none;color:#333;font-size:11px;transition:border-color .15s;gap:3px}
