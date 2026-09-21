@@ -29,6 +29,7 @@ class VlcciOdborky {
 		$this->migrate_obrazky_v3();
 		$this->migrate_obrazky_v4();
 		$this->migrate_nasivky_v5();
+		$this->migrate_deti_typ_v6();
 	}
 
 	private function migrate_nasivky_v5(): void {
@@ -45,6 +46,24 @@ class VlcciOdborky {
 			UNIQUE KEY dite_odborka (dite_id, odborka_id)
 		) $c;" );
 		update_option( 'vo_migration_nasivky_v5', '1' );
+	}
+
+	private function migrate_deti_typ_v6(): void {
+		if ( get_option( 'vo_migration_deti_typ_v6' ) ) return;
+		global $wpdb;
+		$col = $wpdb->get_results( "SHOW COLUMNS FROM {$wpdb->prefix}vo_deti LIKE 'clen_typ'" );
+		if ( empty( $col ) ) {
+			$wpdb->query( "ALTER TABLE {$wpdb->prefix}vo_deti ADD COLUMN clen_typ enum('vlce','svetluska') DEFAULT NULL" );
+			// pre-fill from šestka type where unambiguous
+			$wpdb->query(
+				"UPDATE {$wpdb->prefix}vo_deti d
+				 JOIN {$wpdb->prefix}vo_sestky s ON s.id = d.sestka_id
+				 JOIN {$wpdb->prefix}vo_oddily o ON o.id = s.oddil_id
+				 SET d.clen_typ = CASE o.typ WHEN 'vlcata' THEN 'vlce' WHEN 'svetlusky' THEN 'svetluska' ELSE NULL END
+				 WHERE d.clen_typ IS NULL"
+			);
+		}
+		update_option( 'vo_migration_deti_typ_v6', '1' );
 	}
 
 	private function migrate_obrazky_v4(): void {
@@ -185,6 +204,7 @@ class VlcciOdborky {
 			prijmeni varchar(100) NOT NULL,
 			prezdivka varchar(100) NOT NULL,
 			aktivni tinyint(1) NOT NULL DEFAULT 1,
+			clen_typ enum('vlce','svetluska') DEFAULT NULL,
 			PRIMARY KEY (id)
 		) $c;" );
 
@@ -1771,11 +1791,13 @@ class VlcciOdborky {
 		$prijmeni  = sanitize_text_field( $_POST['prijmeni'] ?? '' );
 		$prezdivka = sanitize_text_field( $_POST['prezdivka'] ?? '' );
 		$aktivni   = isset( $_POST['aktivni'] ) ? 1 : 0;
+		$clen_typ_raw = sanitize_key( $_POST['clen_typ'] ?? '' );
+		$clen_typ  = in_array( $clen_typ_raw, [ 'vlce', 'svetluska' ], true ) ? $clen_typ_raw : null;
 		if ( ! $jmeno || ! $prijmeni || ! $prezdivka ) {
 			$this->app_set_flash( 'Vyplňte jméno, příjmení i přezdívku.', 'error' );
 			$this->app_redirect( $base, 'deti', $id ? [ 'edit_id' => $id ] : [] );
 		}
-		$data = compact( 'sestka_id', 'jmeno', 'prijmeni', 'prezdivka', 'aktivni' );
+		$data = compact( 'sestka_id', 'jmeno', 'prijmeni', 'prezdivka', 'aktivni', 'clen_typ' );
 		if ( $id ) {
 			$wpdb->update( "{$wpdb->prefix}vo_deti", $data, [ 'id' => $id ] );
 		} else {
@@ -2080,7 +2102,8 @@ class VlcciOdborky {
 		$can_edit = $this->can_edit_sestka( (int) $d->sestka_id );
 		echo '<div class="voa-page-header"><a href="' . esc_url( $this->app_url( 'dashboard' ) ) . '" class="voa-back">← Přehled</a>';
 		echo '<h1 class="voa-page-title" style="margin:4px 0">' . esc_html( $d->prezdivka ) . '</h1>';
-		echo '<p class="voa-muted">' . esc_html( $d->jmeno . ' ' . $d->prijmeni ) . ' — ' . esc_html( $d->oddil_nazev . ' / ' . $d->sestka_nazev ) . '</p></div>';
+		$typ_str = $d->clen_typ === 'vlce' ? ' · 🐺 Vlče' : ( $d->clen_typ === 'svetluska' ? ' · 🔦 Světluška' : '' );
+		echo '<p class="voa-muted">' . esc_html( $d->jmeno . ' ' . $d->prijmeni ) . ' — ' . esc_html( $d->oddil_nazev . ' / ' . $d->sestka_nazev ) . $typ_str . '</p></div>';
 		$odborky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE (typ='oba' OR typ=%s) ORDER BY nazev", $d->typ ) ) ?: [];
 		echo '<div class="voa-odborky-grid">';
 		foreach ( $odborky as $o ) {
@@ -2684,9 +2707,10 @@ class VlcciOdborky {
 		if ( empty( $deti ) ) {
 			echo '<div class="voa-empty">' . ( $byvali ? 'Žádní bývalí členové.' : 'Žádné aktivní děti.' ) . '</div>';
 		} else {
-			echo '<div class="voa-card"><div style="overflow-x:auto"><table class="voa-table"><thead><tr><th>Příjmení</th><th>Jméno</th><th>Přezdívka</th><th></th></tr></thead><tbody>';
+			echo '<div class="voa-card"><div style="overflow-x:auto"><table class="voa-table"><thead><tr><th>Příjmení</th><th>Jméno</th><th>Přezdívka</th><th>Typ</th><th></th></tr></thead><tbody>';
 			foreach ( $deti as $d ) {
-				echo '<tr><td>' . esc_html( $d->prijmeni ) . '</td><td>' . esc_html( $d->jmeno ) . '</td><td><strong>' . esc_html( $d->prezdivka ) . '</strong></td>';
+				$typ_label = $d->clen_typ === 'vlce' ? '🐺 Vlče' : ( $d->clen_typ === 'svetluska' ? '🔦 Světluška' : '—' );
+				echo '<tr><td>' . esc_html( $d->prijmeni ) . '</td><td>' . esc_html( $d->jmeno ) . '</td><td><strong>' . esc_html( $d->prezdivka ) . '</strong></td><td>' . $typ_label . '</td>';
 				$edit_extra = $byvali ? [ 'sestka_id' => $sestka_id, 'edit_id' => $d->id, 'byvali' => 1 ] : [ 'sestka_id' => $sestka_id, 'edit_id' => $d->id ];
 				echo '<td class="voa-table-actions"><a href="' . esc_url( $this->app_url( 'dite', [ 'dite_id' => $d->id ] ) ) . '" class="voa-link">Detail</a>';
 				if ( $can_edit ) {
@@ -2716,6 +2740,8 @@ class VlcciOdborky {
 				echo '<input type="hidden" name="sestka_id" value="' . $sestka_id . '">';
 			}
 			echo '<label class="voa-checkbox" style="align-self:end"><input type="checkbox" name="aktivni" value="1"' . ( ( $edit_d->aktivni ?? 1 ) ? ' checked' : '' ) . '> Aktivní</label>';
+			$ct = $edit_d->clen_typ ?? '';
+			echo '<label>Typ člena<select name="clen_typ" class="voa-input"><option value=""' . selected( $ct, '', false ) . '>— neurčeno —</option><option value="vlce"' . selected( $ct, 'vlce', false ) . '>🐺 Vlče</option><option value="svetluska"' . selected( $ct, 'svetluska', false ) . '>🔦 Světluška</option></select></label>';
 			echo '<div class="voa-form-actions"><button type="submit" class="voa-btn voa-btn-primary">Uložit</button>';
 			if ( $edit_d ) {
 				$cancel_extra = $byvali ? [ 'sestka_id' => $sestka_id, 'byvali' => 1 ] : [ 'sestka_id' => $sestka_id ];
