@@ -2382,7 +2382,7 @@ class VlcciOdborky {
 		if ( $sestka_ids_list ) {
 			$totals = $wpdb->get_results(
 				"SELECT sestka_id, COUNT(*) AS total FROM {$wpdb->prefix}vo_deti
-				 WHERE sestka_id IN ($sestka_ids_list) AND aktivni=1 AND clen_typ=\'vlce\'
+				 WHERE sestka_id IN ($sestka_ids_list) AND aktivni=1 AND clen_typ='vlce'
 				 GROUP BY sestka_id"
 			) ?: [];
 			$total_per_sestka = [];
@@ -2391,7 +2391,7 @@ class VlcciOdborky {
 				"SELECT d.sestka_id, sp.kompetence_id, COUNT(*) AS done
 				 FROM {$wpdb->prefix}vo_stezky_plneni sp
 				 JOIN {$wpdb->prefix}vo_deti d ON d.id=sp.dite_id
-				 WHERE d.sestka_id IN ($sestka_ids_list) AND d.aktivni=1 AND d.clen_typ=\'vlce\'
+				 WHERE d.sestka_id IN ($sestka_ids_list) AND d.aktivni=1 AND d.clen_typ='vlce'
 				 GROUP BY d.sestka_id, sp.kompetence_id"
 			) ?: [];
 			foreach ( $done_rows as $r ) {
