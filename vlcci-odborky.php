@@ -2378,26 +2378,27 @@ class VlcciOdborky {
 		$stupne = $this->stezky_stupne();
 		// Pro každou (kompetence_id, sestka_id) zjisti, zda mají splnění všechna aktivní vlčata
 		$sestka_ids_list = implode( ',', array_map( 'intval', array_column( $edit_sestky, 'id' ) ) );
-		$splneno_sestky = []; // [ kompetence_id ][ sestka_id ] = true/false
+		$splneno_sestky = []; // [ kompetence_id ][ sestka_id ] = true
 		if ( $sestka_ids_list ) {
-			$rows = $wpdb->get_results(
-				"SELECT d.sestka_id, sp.kompetence_id,
-				        COUNT(DISTINCT d.id) AS total,
-				        COUNT(DISTINCT sp.dite_id) AS done
-				 FROM {$wpdb->prefix}vo_deti d
-				 LEFT JOIN {$wpdb->prefix}vo_stezky_plneni sp ON sp.dite_id=d.id AND sp.kompetence_id IS NOT NULL
+			$totals = $wpdb->get_results(
+				"SELECT sestka_id, COUNT(*) AS total FROM {$wpdb->prefix}vo_deti
+				 WHERE sestka_id IN ($sestka_ids_list) AND aktivni=1 AND clen_typ=\'vlce\'
+				 GROUP BY sestka_id"
+			) ?: [];
+			$total_per_sestka = [];
+			foreach ( $totals as $t ) $total_per_sestka[ $t->sestka_id ] = (int) $t->total;
+			$done_rows = $wpdb->get_results(
+				"SELECT d.sestka_id, sp.kompetence_id, COUNT(*) AS done
+				 FROM {$wpdb->prefix}vo_stezky_plneni sp
+				 JOIN {$wpdb->prefix}vo_deti d ON d.id=sp.dite_id
 				 WHERE d.sestka_id IN ($sestka_ids_list) AND d.aktivni=1 AND d.clen_typ=\'vlce\'
 				 GROUP BY d.sestka_id, sp.kompetence_id"
 			) ?: [];
-			// Indexuj total per sestka
-			$total_per_sestka = [];
-			foreach ( $rows as $r ) {
-				if ( ! isset( $total_per_sestka[ $r->sestka_id ] ) ) $total_per_sestka[ $r->sestka_id ] = (int) $r->total;
-			}
-			foreach ( $rows as $r ) {
-				if ( $r->kompetence_id === null ) continue;
+			foreach ( $done_rows as $r ) {
 				$total = $total_per_sestka[ $r->sestka_id ] ?? 0;
-				$splneno_sestky[ $r->kompetence_id ][ $r->sestka_id ] = $total > 0 && (int) $r->done >= $total;
+				if ( $total > 0 && (int) $r->done >= $total ) {
+					$splneno_sestky[ $r->kompetence_id ][ $r->sestka_id ] = true;
+				}
 			}
 		}
 		$by_stupen = [];
