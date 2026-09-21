@@ -2568,8 +2568,15 @@ class VlcciOdborky {
 			echo '</div>';
 			foreach ( $by_stupen[ $sk ] as $k ) {
 				echo '<div class="voa-sprava-row">';
-				echo '<div class="voa-sprava-info"><span class="voa-muted">' . esc_html( $k->oblast ) . '</span> · <strong>' . esc_html( $k->okruh ) . '</strong>';
-				echo ' <span class="voa-muted" style="font-size:12px">(' . esc_html( $k->garant ?? '—' ) . ')</span></div>';
+				echo '<div class="voa-sprava-info">';
+				if ( $k->popis ) {
+					echo '<details><summary style="cursor:pointer;list-style:none;display:inline"><span class="voa-muted">' . esc_html( $k->oblast ) . '</span> · <strong>' . esc_html( $k->okruh ) . '</strong> <span class="voa-muted" style="font-size:12px">(' . esc_html( $k->garant ?? '—' ) . ')</span> <span style="font-size:11px;color:#3b82f6">▼ popis</span></summary>';
+					echo '<div style="font-size:12px;color:#555;margin-top:5px;white-space:pre-wrap;max-width:400px">' . esc_html( $k->popis ) . '</div></details>';
+				} else {
+					echo '<span class="voa-muted">' . esc_html( $k->oblast ) . '</span> · <strong>' . esc_html( $k->okruh ) . '</strong>';
+					echo ' <span class="voa-muted" style="font-size:12px">(' . esc_html( $k->garant ?? '—' ) . ')</span>';
+				}
+				echo '</div>';
 				echo '<form method="post" class="voa-sprava-form">' . $this->app_nonce( 'hromadne_stezka' ) . $this->app_base_field();
 				echo '<input type="hidden" name="_vo_app_action" value="hromadne_stezka">';
 				echo '<input type="hidden" name="kompetence_id" value="' . $k->id . '">';
