@@ -2756,12 +2756,16 @@ class VlcciOdborky {
 
 		echo '<div class="voa-help-section">';
 		echo '<h2 class="voa-help-h2">Co je tato aplikace?</h2>';
-		echo '<p>Aplikace slouží k evidenci plnění vlčáckých a světluškovských odborek. Každé dítě může plnit různé odborky — každá odborka má sadu úkolů a ke splnění odborky je potřeba splnit stanovený minimální počet úkolů.</p>';
+		echo '<p>Aplikace slouží k evidenci plnění odborek a stezky vlčáků a světlušek. Odborky jsou volitelné — každá má sadu úkolů a ke splnění stačí stanovený minimální počet. Stezka je povinná pro všechny vlčáky a skládá se z Nováčka a tří číslovaných stupňů, každý s pevnou sadou kompetencí.</p>';
 		echo '</div>';
 
 		echo '<div class="voa-help-section">';
 		echo '<h2 class="voa-help-h2">🏠 Přehled</h2>';
-		echo '<p>Úvodní stránka po přihlášení. Zobrazuje přehled dětí ve tvé šestce / roji a jejich postup u jednotlivých odborek.</p>';
+		echo '<p>Úvodní stránka po přihlášení. Zobrazuje přehled dětí ve tvé šestce / roji se splněnými odborkami i postupem na stezce. U každé šestky vlčáků najdeš tlačítka <strong>✏️ Odborky</strong> a <strong>🗺️ Stezky</strong> pro rychlý přechod na zápis plnění.</p>';
+		echo '</div>';
+
+		echo '<div class="voa-help-section">';
+		echo '<h2 class="voa-help-h2">— Oddíl Odborky —</h2>';
 		echo '</div>';
 
 		echo '<div class="voa-help-section">';
@@ -2794,6 +2798,33 @@ class VlcciOdborky {
 		echo '</div>';
 
 		echo '<div class="voa-help-section">';
+		echo '<h2 class="voa-help-h2">— Oddíl Stezky —</h2>';
+		echo '</div>';
+
+		echo '<div class="voa-help-section">';
+		echo '<h2 class="voa-help-h2">🗺️ Přehled stezky</h2>';
+		echo '<p>Přehled plnění stezky pro celou šestku. Vidíš všechny kompetence rozdělené do stupňů (Nováček, 1., 2., 3.) a u každé kompetence zaškrtávátko pro jednotlivé šestky. Šestky, kde <strong>všichni vlčáci</strong> danou kompetenci mají, jsou automaticky vyšedlé — nelze je zaškrtnout znovu.</p>';
+		echo '<p>Kliknutím na <strong>Uznat kompetenci</strong> zapíšeš splnění celé šestce najednou.</p>';
+		echo '<p>Jako administrátor máš u každého stupně navíc tlačítka pro zrušení celého stupně pro konkrétní šestku — hodí se, pokud jsi omylem uznal/a nesprávnou šestku.</p>';
+		echo '</div>';
+
+		echo '<div class="voa-help-section">';
+		echo '<h2 class="voa-help-h2">✍️ Zapsat splnění</h2>';
+		echo '<p>Rychlý způsob, jak po schůzce zapsat jednu konkrétní kompetenci více vlčákům najednou.</p>';
+		echo '<ol class="voa-help-steps">';
+		echo '<li>Vyber šestku a kompetenci ze seznamu (kompetence jsou rozděleny do stupňů).</li>';
+		echo '<li>Zobrazí se karty všech vlčáků. Karty jsou předvybrány (zaškrtnuty) — odznač ty, kteří danou kompetenci tentokrát nesplnili.</li>';
+		echo '<li>Vlčáci, kteří kompetenci již mají, jsou zobrazeni vyšedlí a nelze je znovu zaškrtnout.</li>';
+		echo '<li>Vlčáci bez splněného <strong>Nováčka</strong> mají kompetence 1., 2. a 3. stupně uzamčeny (⏳ Nejprve Nováček) — je potřeba nejdříve dokončit Nováčka.</li>';
+		echo '<li>Klikni <strong>Zapsat vybraným</strong>. Splnění se zapíše s dnešním datem.</li>';
+		echo '</ol>';
+		echo '</div>';
+
+		echo '<div class="voa-help-section">';
+		echo '<h2 class="voa-help-h2">— Obecné —</h2>';
+		echo '</div>';
+
+		echo '<div class="voa-help-section">';
 		echo '<h2 class="voa-help-h2">🧑‍🤝‍🧑 Správa členů</h2>';
 		echo '<p>Zde spravuješ seznam členů ve své šestce / roji.</p>';
 		echo '<ul class="voa-help-list">';
@@ -2813,6 +2844,8 @@ class VlcciOdborky {
 		echo '<dd>Smaž datum u daného úkolu a klikni Uložit plnění. Prázdné datum = záznam se smaže.</dd>';
 		echo '<dt>Odborka je splněná, ale já vidím jen část úkolů jako hotové — je to v pořádku?</dt>';
 		echo '<dd>Ano — ke splnění odborky stačí minimální počet úkolů (většinou 8 z 10). Jakmile je splněn minimální počet, odborka se označí jako splněná.</dd>';
+		echo '<dt>Vlčák má Nováčka, ale kompetence 1. stupně jsou stále uzamčeny.</dt>';
+		echo '<dd>Zkontroluj, zda má Nováčka <strong>kompletně</strong> splněného — všechny kompetence Nováčka musí být zapsány. Jakmile jsou všechny hotové, uzamčení zmizí.</dd>';
 		echo '<dt>Přihlašuji se a vidím hlášku „Tento plugin je určený jen pro vedoucí vlčat a světlušek".</dt>';
 		echo '<dd>Tvůj účet nemá přiřazenou roli vedoucího. Požádej administrátora, aby ti ji přidělil.</dd>';
 		echo '</dl>';
