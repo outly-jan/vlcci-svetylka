@@ -31,6 +31,18 @@ class VlcciOdborky {
 		$this->migrate_nasivky_v5();
 		$this->migrate_deti_typ_v6();
 		$this->migrate_stezky_v7();
+		$this->migrate_stezky_plneni_v8();
+	}
+
+	private function migrate_stezky_plneni_v8(): void {
+		if ( get_option( 'vo_migration_stezky_plneni_v8' ) ) return;
+		global $wpdb;
+		$idx = $wpdb->get_row( "SELECT INDEX_NAME FROM information_schema.STATISTICS
+			WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='{$wpdb->prefix}vo_stezky_plneni' AND INDEX_NAME='dite_kompetence'" );
+		if ( $idx ) {
+			$wpdb->query( "ALTER TABLE {$wpdb->prefix}vo_stezky_plneni DROP INDEX dite_kompetence" );
+		}
+		update_option( 'vo_migration_stezky_plneni_v8', '1' );
 	}
 
 	private function migrate_nasivky_v5(): void {
@@ -2199,10 +2211,8 @@ class VlcciOdborky {
 		$poznamka = sanitize_textarea_field( $_POST['poznamka'] ?? '' );
 		$wpdb->query( $wpdb->prepare(
 			"INSERT INTO {$wpdb->prefix}vo_stezky_plneni (dite_id,kompetence_id,datum,poznamka,vedouci_id)
-			 VALUES (%d,%d,%s,%s,%d)
-			 ON DUPLICATE KEY UPDATE datum=%s, poznamka=%s, vedouci_id=%d",
-			$dite_id, $kompetence_id, $datum, $poznamka, get_current_user_id(),
-			$datum, $poznamka, get_current_user_id()
+			 VALUES (%d,%d,%s,%s,%d)",
+			$dite_id, $kompetence_id, $datum, $poznamka, get_current_user_id()
 		) );
 		$this->app_set_flash( 'Kompetence uložena.' );
 		$this->app_redirect( $base, 'stezka_dite', [ 'dite_id' => $dite_id ] );
@@ -2237,7 +2247,7 @@ class VlcciOdborky {
 			) );
 			foreach ( $deti as $d ) {
 				$rows = $wpdb->query( $wpdb->prepare(
-					"INSERT IGNORE INTO {$wpdb->prefix}vo_stezky_plneni (dite_id,kompetence_id,datum,poznamka,vedouci_id) VALUES (%d,%d,%s,'',%d)",
+					"INSERT INTO {$wpdb->prefix}vo_stezky_plneni (dite_id,kompetence_id,datum,poznamka,vedouci_id) VALUES (%d,%d,%s,'',%d)",
 					$d->id, $kompetence_id, $datum, $vedouci
 				) );
 				$count += (int) $rows;
@@ -2287,7 +2297,7 @@ class VlcciOdborky {
 			$d = $wpdb->get_row( $wpdb->prepare( "SELECT sestka_id FROM {$wpdb->prefix}vo_deti WHERE id=%d AND aktivni=1 AND clen_typ='vlce'", $dite_id ) );
 			if ( ! $d || ! $this->can_edit_sestka( (int) $d->sestka_id ) ) continue;
 			$rows = $wpdb->query( $wpdb->prepare(
-				"INSERT IGNORE INTO {$wpdb->prefix}vo_stezky_plneni (dite_id,kompetence_id,datum,poznamka,vedouci_id) VALUES (%d,%d,%s,'',%d)",
+				"INSERT INTO {$wpdb->prefix}vo_stezky_plneni (dite_id,kompetence_id,datum,poznamka,vedouci_id) VALUES (%d,%d,%s,'',%d)",
 				$dite_id, $kompetence_id, $datum, $vedouci
 			) );
 			$count += (int) $rows;
@@ -2337,18 +2347,19 @@ class VlcciOdborky {
 		$sestka_ids_list = implode( ',', array_map( fn($s) => (int)$s->id, $edit_sestky ) );
 		$splneni_map = [];
 		$rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT sp.dite_id, sp.datum FROM {$wpdb->prefix}vo_stezky_plneni sp
+			"SELECT sp.dite_id, COUNT(*) AS pocet FROM {$wpdb->prefix}vo_stezky_plneni sp
 			 JOIN {$wpdb->prefix}vo_deti d ON d.id=sp.dite_id
-			 WHERE sp.kompetence_id=%d AND d.sestka_id IN ($sestka_ids_list)", $sel_id
+			 WHERE sp.kompetence_id=%d AND d.sestka_id IN ($sestka_ids_list)
+			 GROUP BY sp.dite_id", $sel_id
 		) ) ?: [];
-		foreach ( $rows as $r ) $splneni_map[ $r->dite_id ] = $r->datum;
+		foreach ( $rows as $r ) $splneni_map[ $r->dite_id ] = (int) $r->pocet;
 		// Zjisti, kdo má splněného Nováčka (pokud je potřeba)
 		$ma_novacka = [];
 		if ( $vyzaduje_novacka ) {
 			$total_nov = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_kompetence WHERE stupen='novacek'" );
 			if ( $total_nov > 0 ) {
 				$nov_rows = $wpdb->get_results(
-					"SELECT sp.dite_id, COUNT(*) AS done
+					"SELECT sp.dite_id, COUNT(DISTINCT sp.kompetence_id) AS done
 					 FROM {$wpdb->prefix}vo_stezky_plneni sp
 					 JOIN {$wpdb->prefix}vo_stezky_kompetence k ON k.id=sp.kompetence_id
 					 JOIN {$wpdb->prefix}vo_deti d ON d.id=sp.dite_id
@@ -2376,7 +2387,8 @@ class VlcciOdborky {
 			echo '<h4 class="voa-card-title" style="margin-bottom:10px">' . esc_html( $s->oddil_nazev . ' — ' . $s->nazev ) . '</h4>';
 			echo '<div class="voa-zapsat-grid">';
 			foreach ( $deti as $d ) {
-				$splneno      = isset( $splneni_map[ $d->id ] );
+				$pocet        = $splneni_map[ $d->id ] ?? 0;
+				$splneno      = $pocet > 0;
 				$bez_novacka  = $vyzaduje_novacka && ! isset( $ma_novacka[ $d->id ] );
 				$disabled     = $splneno || $bez_novacka;
 				$cls          = $splneno ? ' voa-zapsat-item--done' : ( $bez_novacka ? ' voa-zapsat-item--locked' : '' );
@@ -2384,7 +2396,7 @@ class VlcciOdborky {
 				echo '<input type="checkbox" name="dite_ids[]" value="' . $d->id . '"' . ( $disabled ? ' disabled' : ' checked' ) . '> ';
 				echo '<span class="voa-zapsat-name">' . esc_html( $d->prezdivka ) . '</span>';
 				echo '<span class="voa-zapsat-fullname">' . esc_html( $d->jmeno . ' ' . $d->prijmeni ) . '</span>';
-				if ( $splneno )     echo '<span class="voa-zapsat-splneno">✅ ' . esc_html( $splneni_map[ $d->id ] ) . '</span>';
+				if ( $splneno )     echo '<span class="voa-zapsat-splneno">✅ ' . $pocet . '×</span>';
 				if ( $bez_novacka ) echo '<span class="voa-zapsat-splneno" style="color:#b45309">⏳ Nejprve Nováček</span>';
 				echo '</label>';
 			}
@@ -2450,7 +2462,7 @@ class VlcciOdborky {
 			"SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_kompetence WHERE stupen=%s", $stupen
 		) );
 		$done = (int) $wpdb->get_var( $wpdb->prepare(
-			"SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_plneni sp
+			"SELECT COUNT(DISTINCT sp.kompetence_id) FROM {$wpdb->prefix}vo_stezky_plneni sp
 			 JOIN {$wpdb->prefix}vo_stezky_kompetence k ON k.id=sp.kompetence_id
 			 WHERE sp.dite_id=%d AND k.stupen=%s", $dite_id, $stupen
 		) );
@@ -2554,7 +2566,7 @@ class VlcciOdborky {
 			$total_per_sestka = [];
 			foreach ( $totals as $t ) $total_per_sestka[ $t->sestka_id ] = (int) $t->total;
 			$done_rows = $wpdb->get_results(
-				"SELECT d.sestka_id, sp.kompetence_id, COUNT(*) AS done
+				"SELECT d.sestka_id, sp.kompetence_id, COUNT(DISTINCT sp.dite_id) AS done
 				 FROM {$wpdb->prefix}vo_stezky_plneni sp
 				 JOIN {$wpdb->prefix}vo_deti d ON d.id=sp.dite_id
 				 WHERE d.sestka_id IN ($sestka_ids_list) AND d.aktivni=1 AND d.clen_typ='vlce'
@@ -2636,7 +2648,9 @@ class VlcciOdborky {
 		$m = [];
 		foreach ( $milniky_rows as $mk ) $m[ $mk->typ ] = $mk->datum;
 		$plneni_rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT sp.kompetence_id, sp.datum, sp.poznamka FROM {$wpdb->prefix}vo_stezky_plneni sp WHERE sp.dite_id=%d", $dite_id
+			"SELECT sp.kompetence_id, MIN(sp.datum) AS datum, MAX(sp.poznamka) AS poznamka, COUNT(*) AS pocet
+			 FROM {$wpdb->prefix}vo_stezky_plneni sp WHERE sp.dite_id=%d
+			 GROUP BY sp.kompetence_id", $dite_id
 		) ) ?: [];
 		$plneni = [];
 		foreach ( $plneni_rows as $p ) $plneni[ $p->kompetence_id ] = $p;
@@ -2726,7 +2740,8 @@ class VlcciOdborky {
 						echo '<details class="voa-stezka-popis"><summary>Popis</summary><p>' . nl2br( esc_html( $k->popis ) ) . '</p></details>';
 					}
 					if ( $splneno ) {
-						echo '<div class="voa-stezka-meta">Splněno: ' . esc_html( $pr->datum ) . ( $pr->poznamka ? ' · ' . esc_html( $pr->poznamka ) : '' ) . '</div>';
+						$pocet_str = (int) $pr->pocet > 1 ? ' <span class="voa-stezka-pocet" title="' . (int)$pr->pocet . '× zapsáno">' . (int)$pr->pocet . '×</span>' : '';
+						echo '<div class="voa-stezka-meta">Splněno: ' . esc_html( $pr->datum ) . ( $pr->poznamka ? ' · ' . esc_html( $pr->poznamka ) : '' ) . $pocet_str . '</div>';
 						if ( $can_edit ) {
 							echo '<form method="post" style="display:inline">' . $this->app_nonce( 'delete_stezka_plneni' ) . $this->app_base_field();
 							echo '<input type="hidden" name="_vo_app_action" value="delete_stezka_plneni">';
@@ -2884,7 +2899,7 @@ class VlcciOdborky {
 				$total_komp = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_kompetence" );
 				$ids_list   = implode( ',', $deti_ids );
 				$rows = $wpdb->get_results(
-					"SELECT dite_id, COUNT(*) AS done FROM {$wpdb->prefix}vo_stezky_plneni WHERE dite_id IN ($ids_list) GROUP BY dite_id"
+					"SELECT dite_id, COUNT(DISTINCT kompetence_id) AS done FROM {$wpdb->prefix}vo_stezky_plneni WHERE dite_id IN ($ids_list) GROUP BY dite_id"
 				) ?: [];
 				foreach ( $rows as $r ) $stezky_done[ $r->dite_id ] = [ 'done' => (int)$r->done, 'total' => $total_komp ];
 			}
@@ -4012,6 +4027,7 @@ details.voa-card[open] .voa-details-arrow{transform:rotate(90deg)}
 .voa-stezka-komp-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
 .voa-stezka-komp-check{font-size:16px}
 .voa-stezka-meta{font-size:12px;color:#666;margin:4px 0}
+.voa-stezka-pocet{display:inline-block;background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;border-radius:10px;padding:0 6px;font-size:11px;font-weight:700;margin-left:4px}
 .voa-stezka-popis{font-size:12px;color:#555;margin:4px 0}
 .voa-stezka-popis summary{cursor:pointer;color:#1a5c2a}
 .voa-stezka-popis p{margin:4px 0 0;white-space:pre-line}
