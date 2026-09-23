@@ -2347,12 +2347,14 @@ class VlcciOdborky {
 		$sestka_ids_list = implode( ',', array_map( fn($s) => (int)$s->id, $edit_sestky ) );
 		$splneni_map = [];
 		$rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT sp.dite_id, COUNT(*) AS pocet FROM {$wpdb->prefix}vo_stezky_plneni sp
+			"SELECT sp.dite_id, sp.datum, u.display_name AS vedouci_jmeno
+			 FROM {$wpdb->prefix}vo_stezky_plneni sp
 			 JOIN {$wpdb->prefix}vo_deti d ON d.id=sp.dite_id
+			 LEFT JOIN {$wpdb->prefix}users u ON u.ID=sp.vedouci_id
 			 WHERE sp.kompetence_id=%d AND d.sestka_id IN ($sestka_ids_list)
-			 GROUP BY sp.dite_id", $sel_id
+			 ORDER BY sp.dite_id, sp.datum", $sel_id
 		) ) ?: [];
-		foreach ( $rows as $r ) $splneni_map[ $r->dite_id ] = (int) $r->pocet;
+		foreach ( $rows as $r ) $splneni_map[ $r->dite_id ][] = $r;
 		// Zjisti, kdo má splněného Nováčka (pokud je potřeba)
 		$ma_novacka = [];
 		if ( $vyzaduje_novacka ) {
@@ -2387,7 +2389,8 @@ class VlcciOdborky {
 			echo '<h4 class="voa-card-title" style="margin-bottom:10px">' . esc_html( $s->oddil_nazev . ' — ' . $s->nazev ) . '</h4>';
 			echo '<div class="voa-zapsat-grid">';
 			foreach ( $deti as $d ) {
-				$pocet        = $splneni_map[ $d->id ] ?? 0;
+				$zaznamy      = $splneni_map[ $d->id ] ?? [];
+				$pocet        = count( $zaznamy );
 				$splneno      = $pocet > 0;
 				$bez_novacka  = $vyzaduje_novacka && ! isset( $ma_novacka[ $d->id ] );
 				$disabled     = $bez_novacka;
@@ -2396,7 +2399,10 @@ class VlcciOdborky {
 				echo '<input type="checkbox" name="dite_ids[]" value="' . $d->id . '"' . ( $disabled ? ' disabled' : ' checked' ) . '> ';
 				echo '<span class="voa-zapsat-name">' . esc_html( $d->prezdivka ) . '</span>';
 				echo '<span class="voa-zapsat-fullname">' . esc_html( $d->jmeno . ' ' . $d->prijmeni ) . '</span>';
-				if ( $splneno )     echo '<span class="voa-zapsat-splneno">✅ ' . $pocet . '×</span>';
+				foreach ( $zaznamy as $zaz ) {
+					$kdo = $zaz->vedouci_jmeno ? ' · ' . esc_html( $zaz->vedouci_jmeno ) : '';
+					echo '<span class="voa-zapsat-splneno">✅ ' . esc_html( $zaz->datum ) . $kdo . '</span>';
+				}
 				if ( $bez_novacka ) echo '<span class="voa-zapsat-splneno" style="color:#b45309">⏳ Nejprve Nováček</span>';
 				echo '</label>';
 			}
