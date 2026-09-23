@@ -2648,12 +2648,14 @@ class VlcciOdborky {
 		$m = [];
 		foreach ( $milniky_rows as $mk ) $m[ $mk->typ ] = $mk->datum;
 		$plneni_rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT sp.kompetence_id, MIN(sp.datum) AS datum, MAX(sp.poznamka) AS poznamka, COUNT(*) AS pocet
-			 FROM {$wpdb->prefix}vo_stezky_plneni sp WHERE sp.dite_id=%d
-			 GROUP BY sp.kompetence_id", $dite_id
+			"SELECT sp.kompetence_id, sp.datum, sp.poznamka, sp.vedouci_id,
+			        u.display_name AS vedouci_jmeno
+			 FROM {$wpdb->prefix}vo_stezky_plneni sp
+			 LEFT JOIN {$wpdb->prefix}users u ON u.ID=sp.vedouci_id
+			 WHERE sp.dite_id=%d ORDER BY sp.kompetence_id, sp.datum", $dite_id
 		) ) ?: [];
 		$plneni = [];
-		foreach ( $plneni_rows as $p ) $plneni[ $p->kompetence_id ] = $p;
+		foreach ( $plneni_rows as $p ) $plneni[ $p->kompetence_id ][] = $p;
 		$kompetence = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_stezky_kompetence ORDER BY poradi" ) ?: [];
 		$stupne = $this->stezky_stupne();
 		echo '<div class="voa-page-header"><a href="' . esc_url( $this->app_url( 'stezky', [ 'sestka_id' => $d->sestka_id ] ) ) . '" class="voa-back">← Stezky</a>';
@@ -2728,26 +2730,31 @@ class VlcciOdborky {
 			foreach ( $by_oblast as $oblast => $klist ) {
 				echo '<h4 style="margin:16px 0 8px;color:#555;padding-top:8px">' . esc_html( $oblast ) . '</h4>';
 				foreach ( $klist as $k ) {
-					$splneno = isset( $plneni[ $k->id ] );
-					$pr      = $splneno ? $plneni[ $k->id ] : null;
+					$zaznamy  = $plneni[ $k->id ] ?? [];
+					$splneno  = ! empty( $zaznamy );
+					$pocet    = count( $zaznamy );
 					echo '<div class="voa-stezka-kompetence' . ( $splneno ? ' voa-stezka-kompetence--done' : '' ) . '">';
 					echo '<div class="voa-stezka-komp-head">';
 					echo '<span class="voa-stezka-komp-check">' . ( $splneno ? '✅' : '⬜' ) . '</span>';
 					echo '<strong>' . esc_html( $k->okruh ) . '</strong>';
 					if ( $k->garant ) echo ' <span class="voa-muted" style="font-size:12px">(' . esc_html( $k->garant ) . ')</span>';
+					if ( $pocet > 1 ) echo ' <span class="voa-stezka-pocet">' . $pocet . '×</span>';
 					echo '</div>';
 					if ( $k->popis ) {
 						echo '<details class="voa-stezka-popis"><summary>Popis</summary><p>' . nl2br( esc_html( $k->popis ) ) . '</p></details>';
 					}
 					if ( $splneno ) {
-						$pocet_str = (int) $pr->pocet > 1 ? ' <span class="voa-stezka-pocet" title="' . (int)$pr->pocet . '× zapsáno">' . (int)$pr->pocet . '×</span>' : '';
-						echo '<div class="voa-stezka-meta">Splněno: ' . esc_html( $pr->datum ) . ( $pr->poznamka ? ' · ' . esc_html( $pr->poznamka ) : '' ) . $pocet_str . '</div>';
+						foreach ( $zaznamy as $pr ) {
+							$kdo = $pr->vedouci_jmeno ? ' · ' . esc_html( $pr->vedouci_jmeno ) : '';
+							$poz = $pr->poznamka ? ' · ' . esc_html( $pr->poznamka ) : '';
+							echo '<div class="voa-stezka-meta">📅 ' . esc_html( $pr->datum ) . $poz . $kdo . '</div>';
+						}
 						if ( $can_edit ) {
-							echo '<form method="post" style="display:inline">' . $this->app_nonce( 'delete_stezka_plneni' ) . $this->app_base_field();
+							echo '<form method="post" style="display:inline;margin-top:4px">' . $this->app_nonce( 'delete_stezka_plneni' ) . $this->app_base_field();
 							echo '<input type="hidden" name="_vo_app_action" value="delete_stezka_plneni">';
 							echo '<input type="hidden" name="dite_id" value="' . $dite_id . '">';
 							echo '<input type="hidden" name="kompetence_id" value="' . $k->id . '">';
-							echo '<button class="voa-btn voa-btn-sm voa-link-danger" onclick="return confirm(\'Zrušit splnění?\')">Zrušit</button></form>';
+							echo '<button class="voa-btn voa-btn-sm voa-link-danger" onclick="return confirm(\'Zrušit všechna splnění?\')">Zrušit vše</button></form>';
 						}
 					} elseif ( $can_edit ) {
 						echo '<form method="post" class="voa-stezka-form">' . $this->app_nonce( 'save_stezka_plneni' ) . $this->app_base_field();
