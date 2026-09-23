@@ -923,6 +923,13 @@ class VlcciOdborky {
 		if ( ! $this->is_vedouci() ) wp_die( 'Přístup odepřen.' );
 	}
 
+	private function get_vedouci_jmeno( int $user_id ): string {
+		$override = get_user_meta( $user_id, 'vo_jmeno', true );
+		if ( $override ) return $override;
+		$u = get_userdata( $user_id );
+		return $u ? $u->display_name : '';
+	}
+
 	private function can_edit_sestka( int $id ): bool {
 		if ( $this->is_admin() ) return true;
 		global $wpdb;
@@ -1924,8 +1931,10 @@ class VlcciOdborky {
 			case 'zrusit_stezka_stupen':   $this->app_do_zrusit_stezka_stupen( $base );   break;
 			case 'hromadne_stezka_deti':   $this->app_do_hromadne_stezka_deti( $base );   break;
 			case 'save_stezka_milnik':     $this->app_do_save_stezka_milnik( $base );     break;
-			case 'delete_stezka_milnik':   $this->app_do_delete_stezka_milnik( $base );   break;
-			case 'save_stezka_garant':     $this->app_do_save_stezka_garant( $base );     break;
+			case 'delete_stezka_milnik':     $this->app_do_delete_stezka_milnik( $base );     break;
+			case 'save_stezka_garant':       $this->app_do_save_stezka_garant( $base );       break;
+			case 'delete_stezka_plneni_one': $this->app_do_delete_stezka_plneni_one( $base ); break;
+			case 'save_vo_jmeno':            $this->app_do_save_vo_jmeno( $base );            break;
 		}
 	}
 
@@ -2229,6 +2238,27 @@ class VlcciOdborky {
 		$this->app_redirect( $base, 'stezka_dite', [ 'dite_id' => $dite_id ] );
 	}
 
+	private function app_do_delete_stezka_plneni_one( string $base ): void {
+		global $wpdb;
+		$plneni_id = intval( $_POST['plneni_id'] ?? 0 );
+		if ( ! $plneni_id ) wp_die( 'Neplatný požadavek.' );
+		$sp = $wpdb->get_row( $wpdb->prepare(
+			"SELECT sp.*, d.sestka_id FROM {$wpdb->prefix}vo_stezky_plneni sp
+			 JOIN {$wpdb->prefix}vo_deti d ON d.id=sp.dite_id WHERE sp.id=%d", $plneni_id
+		) );
+		if ( ! $sp || ! $this->can_edit_sestka( (int) $sp->sestka_id ) ) wp_die( 'Přístup odepřen.' );
+		$wpdb->delete( "{$wpdb->prefix}vo_stezky_plneni", [ 'id' => $plneni_id ] );
+		$this->app_set_flash( 'Záznam zrušen.' );
+		$this->app_redirect( $base, 'stezka_dite', [ 'dite_id' => $sp->dite_id ] );
+	}
+
+	private function app_do_save_vo_jmeno( string $base ): void {
+		$jmeno = sanitize_text_field( $_POST['vo_jmeno'] ?? '' );
+		update_user_meta( get_current_user_id(), 'vo_jmeno', $jmeno );
+		$this->app_set_flash( 'Jméno uloženo.' );
+		$this->app_redirect( $base, 'dashboard' );
+	}
+
 	private function app_do_hromadne_stezka( string $base ): void {
 		global $wpdb;
 		$kompetence_id = intval( $_POST['kompetence_id'] ?? 0 );
@@ -2347,14 +2377,19 @@ class VlcciOdborky {
 		$sestka_ids_list = implode( ',', array_map( fn($s) => (int)$s->id, $edit_sestky ) );
 		$splneni_map = [];
 		$rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT sp.dite_id, sp.datum, u.display_name AS vedouci_jmeno
+			"SELECT sp.dite_id, sp.datum, sp.vedouci_id
 			 FROM {$wpdb->prefix}vo_stezky_plneni sp
 			 JOIN {$wpdb->prefix}vo_deti d ON d.id=sp.dite_id
-			 LEFT JOIN {$wpdb->prefix}users u ON u.ID=sp.vedouci_id
 			 WHERE sp.kompetence_id=%d AND d.sestka_id IN ($sestka_ids_list)
 			 ORDER BY sp.dite_id, sp.datum", $sel_id
 		) ) ?: [];
-		foreach ( $rows as $r ) $splneni_map[ $r->dite_id ][] = $r;
+		$vj_cache2 = [];
+		foreach ( $rows as $r ) {
+			$uid = (int) $r->vedouci_id;
+			if ( ! isset( $vj_cache2[ $uid ] ) ) $vj_cache2[ $uid ] = $this->get_vedouci_jmeno( $uid );
+			$r->vedouci_jmeno = $vj_cache2[ $uid ];
+			$splneni_map[ $r->dite_id ][] = $r;
+		}
 		// Zjisti, kdo má splněného Nováčka (pokud je potřeba)
 		$ma_novacka = [];
 		if ( $vyzaduje_novacka ) {
@@ -2654,12 +2689,15 @@ class VlcciOdborky {
 		$m = [];
 		foreach ( $milniky_rows as $mk ) $m[ $mk->typ ] = $mk->datum;
 		$plneni_rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT sp.kompetence_id, sp.datum, sp.poznamka, sp.vedouci_id,
-			        u.display_name AS vedouci_jmeno
+			"SELECT sp.id, sp.kompetence_id, sp.datum, sp.poznamka, sp.vedouci_id
 			 FROM {$wpdb->prefix}vo_stezky_plneni sp
-			 LEFT JOIN {$wpdb->prefix}users u ON u.ID=sp.vedouci_id
 			 WHERE sp.dite_id=%d ORDER BY sp.kompetence_id, sp.datum", $dite_id
 		) ) ?: [];
+		$vedouci_cache = [];
+		$get_vj = function( int $uid ) use ( &$vedouci_cache ): string {
+			if ( ! isset( $vedouci_cache[ $uid ] ) ) $vedouci_cache[ $uid ] = $this->get_vedouci_jmeno( $uid );
+			return $vedouci_cache[ $uid ];
+		};
 		$plneni = [];
 		foreach ( $plneni_rows as $p ) $plneni[ $p->kompetence_id ][] = $p;
 		$kompetence = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_stezky_kompetence ORDER BY poradi" ) ?: [];
@@ -2751,11 +2789,18 @@ class VlcciOdborky {
 					}
 					if ( $splneno ) {
 						foreach ( $zaznamy as $pr ) {
-							$kdo = $pr->vedouci_jmeno ? ' · ' . esc_html( $pr->vedouci_jmeno ) : '';
+							$kdo = $pr->vedouci_id ? ' · ' . esc_html( $get_vj( (int)$pr->vedouci_id ) ) : '';
 							$poz = $pr->poznamka ? ' · ' . esc_html( $pr->poznamka ) : '';
-							echo '<div class="voa-stezka-meta">📅 ' . esc_html( $pr->datum ) . $poz . $kdo . '</div>';
+							echo '<div class="voa-stezka-meta" style="display:flex;align-items:center;gap:8px">📅 ' . esc_html( $pr->datum ) . $poz . $kdo;
+							if ( $can_edit ) {
+								echo ' <form method="post" style="display:inline;margin:0">' . $this->app_nonce( 'delete_stezka_plneni_one' ) . $this->app_base_field();
+								echo '<input type="hidden" name="_vo_app_action" value="delete_stezka_plneni_one">';
+								echo '<input type="hidden" name="plneni_id" value="' . (int)$pr->id . '">';
+								echo '<button class="voa-btn voa-btn-sm voa-link-danger" style="padding:1px 6px;font-size:11px" onclick="return confirm(\'Zrušit tento záznam?\')">✕</button></form>';
+							}
+							echo '</div>';
 						}
-						if ( $can_edit ) {
+						if ( $can_edit && $pocet > 1 ) {
 							echo '<form method="post" style="display:inline;margin-top:4px">' . $this->app_nonce( 'delete_stezka_plneni' ) . $this->app_base_field();
 							echo '<input type="hidden" name="_vo_app_action" value="delete_stezka_plneni">';
 							echo '<input type="hidden" name="dite_id" value="' . $dite_id . '">';
@@ -2960,6 +3005,16 @@ class VlcciOdborky {
 				echo '</div>';
 			}
 		}
+		$cur_uid   = get_current_user_id();
+		$cur_jmeno = esc_attr( get_user_meta( $cur_uid, 'vo_jmeno', true ) ?: '' );
+		echo '<div class="voa-card" style="margin-top:24px"><div class="voa-card-head"><h2 class="voa-card-title" style="margin-bottom:0;border-bottom:none">Moje jméno v pluginu</h2></div>';
+		echo '<div style="padding:16px 20px">';
+		echo '<p class="voa-muted" style="margin-bottom:10px">Pokud se vaše WordPress jméno zobrazuje nevhodně (např. „Admin (H)"), zadejte sem jméno, které se má zobrazovat místo něj.</p>';
+		echo '<form method="post" style="display:flex;gap:8px;align-items:center">' . $this->app_nonce( 'save_vo_jmeno' ) . $this->app_base_field();
+		echo '<input type="hidden" name="_vo_app_action" value="save_vo_jmeno">';
+		echo '<input type="text" name="vo_jmeno" value="' . $cur_jmeno . '" placeholder="Vaše jméno…" class="regular-text">';
+		echo '<button type="submit" class="voa-btn voa-btn-primary">Uložit</button>';
+		echo '</form></div></div>';
 	}
 
 	private function app_page_dite(): void {
