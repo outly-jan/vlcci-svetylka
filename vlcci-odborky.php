@@ -924,10 +924,10 @@ class VlcciOdborky {
 	}
 
 	private function get_vedouci_jmeno( int $user_id ): string {
-		$override = get_user_meta( $user_id, 'vo_jmeno', true );
-		if ( $override ) return $override;
 		$u = get_userdata( $user_id );
-		return $u ? $u->display_name : '';
+		if ( ! $u ) return '';
+		if ( $u->display_name === 'Admin (H), nezadávat jako autora' ) return 'Spajdy';
+		return $u->display_name;
 	}
 
 	private function can_edit_sestka( int $id ): bool {
@@ -1934,7 +1934,6 @@ class VlcciOdborky {
 			case 'delete_stezka_milnik':     $this->app_do_delete_stezka_milnik( $base );     break;
 			case 'save_stezka_garant':       $this->app_do_save_stezka_garant( $base );       break;
 			case 'delete_stezka_plneni_one': $this->app_do_delete_stezka_plneni_one( $base ); break;
-			case 'save_vo_jmeno':            $this->app_do_save_vo_jmeno( $base );            break;
 		}
 	}
 
@@ -2250,13 +2249,6 @@ class VlcciOdborky {
 		$wpdb->delete( "{$wpdb->prefix}vo_stezky_plneni", [ 'id' => $plneni_id ] );
 		$this->app_set_flash( 'Záznam zrušen.' );
 		$this->app_redirect( $base, 'stezka_dite', [ 'dite_id' => $sp->dite_id ] );
-	}
-
-	private function app_do_save_vo_jmeno( string $base ): void {
-		$jmeno = sanitize_text_field( $_POST['vo_jmeno'] ?? '' );
-		update_user_meta( get_current_user_id(), 'vo_jmeno', $jmeno );
-		$this->app_set_flash( 'Jméno uloženo.' );
-		$this->app_redirect( $base, 'dashboard' );
 	}
 
 	private function app_do_hromadne_stezka( string $base ): void {
@@ -3005,16 +2997,6 @@ class VlcciOdborky {
 				echo '</div>';
 			}
 		}
-		$cur_uid   = get_current_user_id();
-		$cur_jmeno = esc_attr( get_user_meta( $cur_uid, 'vo_jmeno', true ) ?: '' );
-		echo '<div class="voa-card" style="margin-top:24px"><div class="voa-card-head"><h2 class="voa-card-title" style="margin-bottom:0;border-bottom:none">Moje jméno v pluginu</h2></div>';
-		echo '<div style="padding:16px 20px">';
-		echo '<p class="voa-muted" style="margin-bottom:10px">Pokud se vaše WordPress jméno zobrazuje nevhodně (např. „Admin (H)"), zadejte sem jméno, které se má zobrazovat místo něj.</p>';
-		echo '<form method="post" style="display:flex;gap:8px;align-items:center">' . $this->app_nonce( 'save_vo_jmeno' ) . $this->app_base_field();
-		echo '<input type="hidden" name="_vo_app_action" value="save_vo_jmeno">';
-		echo '<input type="text" name="vo_jmeno" value="' . $cur_jmeno . '" placeholder="Vaše jméno…" class="regular-text">';
-		echo '<button type="submit" class="voa-btn voa-btn-primary">Uložit</button>';
-		echo '</form></div></div>';
 	}
 
 	private function app_page_dite(): void {
