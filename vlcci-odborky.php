@@ -2391,7 +2391,7 @@ class VlcciOdborky {
 				$splneno      = $pocet > 0;
 				$bez_novacka  = $vyzaduje_novacka && ! isset( $ma_novacka[ $d->id ] );
 				$disabled     = $bez_novacka;
-				$cls          = $splneno ? ' voa-zapsat-item--done' : ( $bez_novacka ? ' voa-zapsat-item--locked' : '' );
+				$cls          = $bez_novacka ? ' voa-zapsat-item--locked' : '';
 				echo '<label class="voa-zapsat-item' . $cls . '">';
 				echo '<input type="checkbox" name="dite_ids[]" value="' . $d->id . '"' . ( $disabled ? ' disabled' : ' checked' ) . '> ';
 				echo '<span class="voa-zapsat-name">' . esc_html( $d->prezdivka ) . '</span>';
