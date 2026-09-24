@@ -84,14 +84,13 @@ Odborky a jejich úkoly se předvyplní automaticky při aktivaci pluginu. Minim
 
 ## Struktura repozitáře
 
-Repozitář obsahuje dva samostatné WordPress pluginy:
+Struktura repozitáře:
 
 ```
 vlcci-svetylka/
 ├── vlcci-odborky.php      # Hlavní soubor pluginu Vlčí a světýlkové odborky
 ├── deploy-webhook.php     # Deploy skript (token nastavit ručně na serveru)
-├── images/                # Obrázky odznaků odborek
-└── skautska-burza/        # Plugin Skautská burza (viz skautska-burza/README.md)
+└── images/                # Obrázky odznaků odborek
 ```
 
 ---
@@ -104,9 +103,8 @@ Po každém mergi do větve `main` se automaticky spustí GitHub Actions workflo
 https://skautchlumec.cz/wp-content/plugins/vlcci-svetylka/deploy-webhook.php?token=TOKEN
 ```
 
-Webhook stáhne z GitHubu:
+Webhook stáhne z GitHubu aktuální `vlcci-odborky.php` a soubory z `images/`.
 
-- aktuální `vlcci-odborky.php` a soubory z `images/` (plugin Vlčí a světýlkové odborky, do vlastní složky),
-- všechny soubory ze složky `skautska-burza/` — podle aktuálního obsahu repa, ne podle natvrdo psaného seznamu — a uloží je do **sousední** složky `wp-content/plugins/skautska-burza/`.
+Plugin Skautská burza byl přesunut do samostatného repozitáře [outly-jan/skautska-burza](https://github.com/outly-jan/skautska-burza) s vlastním deployem.
 
-> **Pozor:** `deploy-webhook.php` na serveru obsahuje tajný token — neupravuj ho přes git, jinak se přepíše na `CHANGE_ME`. Webhook sám sebe nikdy nestahuje, takže po každé změně jeho kódu (např. teď, kvůli přidání burzy) je potřeba nový `deploy-webhook.php` ručně nahrát na server přes FTP — samotný merge do `main` to nepropíše.
+> **Pozor:** `deploy-webhook.php` na serveru obsahuje tajný token — neupravuj ho přes git, jinak se přepíše na `CHANGE_ME`. Webhook sám sebe nikdy nestahuje, takže po každé změně jeho kódu je potřeba nový `deploy-webhook.php` ručně nahrát na server přes FTP — samotný merge do `main` to nepropíše.
