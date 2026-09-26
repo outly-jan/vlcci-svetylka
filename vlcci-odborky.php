@@ -2739,7 +2739,7 @@ class VlcciOdborky {
 			foreach ( $milniky as $mk ) $m[ $mk->typ ] = $mk->datum;
 			$nov = $this->stezky_progress( (int)$d->id, 'novacek', $komp_typ );
 			$detail_url = esc_url( $this->app_url( 'stezka_dite', [ 'dite_id' => $d->id ] ) );
-			echo '<tr><td><strong>' . esc_html( $d->prezdivka ) . '</strong><br><span class="voa-muted">' . esc_html( $d->prijmeni . ' ' . $d->jmeno ) . '</span><br><a href="' . $detail_url . '" class="voa-link" style="font-size:12px">📋 Detail</a></td>';
+			echo '<tr><td><strong>' . esc_html( $d->prezdivka ) . '</strong><br><span class="voa-muted">' . esc_html( $d->prijmeni . ' ' . $d->jmeno ) . '</span><br><a href="' . $detail_url . '" class="voa-link" style="font-size:12px">📋 Detail</a>';
 			foreach ( $stupne as $sk => $sl ) {
 				$p = $this->stezky_progress( (int)$d->id, $sk, $komp_typ );
 				$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
@@ -2758,7 +2758,8 @@ class VlcciOdborky {
 				if ( $pr['splneno'] && ! isset( $m[ $mtyp ] ) ) $badges .= ' <span class="voa-badge voa-badge--yellow">⚡ Nášivka ' . $st . '. st.</span>';
 				if ( isset( $m[ $mtyp ] ) ) $badges .= ' <span class="voa-badge voa-badge--green">🏅 Nášivka ' . $st . '. st. ' . esc_html( $m[ $mtyp ] ) . '</span>';
 			}
-			echo '<td>' . $badges . '</td></tr>';
+			if ( $badges ) echo '<br>' . $badges;
+		echo '</td></tr>';
 		}
 		echo '</tbody></table></div>';
 		if ( $can_edit ) {
