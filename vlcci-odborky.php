@@ -2730,7 +2730,7 @@ class VlcciOdborky {
 		echo '<div class="voa-card" style="overflow-x:auto"><table class="voa-table">';
 		echo '<thead><tr><th>' . esc_html( $clen_label ) . '</th>';
 		foreach ( $stupne as $sk => $sl ) echo '<th>' . esc_html( $sl ) . '</th>';
-		echo '<th></th></tr></thead><tbody>';
+		echo '</tr></thead><tbody>';
 		foreach ( $deti as $d ) {
 			$milniky = $wpdb->get_results( $wpdb->prepare(
 				"SELECT typ, datum FROM {$wpdb->prefix}vo_stezky_milniky WHERE dite_id=%d", $d->id
@@ -2738,7 +2738,8 @@ class VlcciOdborky {
 			$m = [];
 			foreach ( $milniky as $mk ) $m[ $mk->typ ] = $mk->datum;
 			$nov = $this->stezky_progress( (int)$d->id, 'novacek', $komp_typ );
-			echo '<tr><td><strong>' . esc_html( $d->prezdivka ) . '</strong><br><span class="voa-muted">' . esc_html( $d->prijmeni . ' ' . $d->jmeno ) . '</span></td>';
+			$detail_url = esc_url( $this->app_url( 'stezka_dite', [ 'dite_id' => $d->id ] ) );
+			echo '<tr><td><strong>' . esc_html( $d->prezdivka ) . '</strong><br><span class="voa-muted">' . esc_html( $d->prijmeni . ' ' . $d->jmeno ) . '</span><br><a href="' . $detail_url . '" class="voa-link" style="font-size:12px">📋 Detail</a></td>';
 			foreach ( $stupne as $sk => $sl ) {
 				$p = $this->stezky_progress( (int)$d->id, $sk, $komp_typ );
 				$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
@@ -2757,7 +2758,7 @@ class VlcciOdborky {
 				if ( $pr['splneno'] && ! isset( $m[ $mtyp ] ) ) $badges .= ' <span class="voa-badge voa-badge--yellow">⚡ Nášivka ' . $st . '. st.</span>';
 				if ( isset( $m[ $mtyp ] ) ) $badges .= ' <span class="voa-badge voa-badge--green">🏅 Nášivka ' . $st . '. st. ' . esc_html( $m[ $mtyp ] ) . '</span>';
 			}
-			echo '<td>' . $badges . ' <a href="' . esc_url( $this->app_url( 'stezka_dite', [ 'dite_id' => $d->id ] ) ) . '" class="voa-link">Detail</a></td></tr>';
+			echo '<td>' . $badges . '</td></tr>';
 		}
 		echo '</tbody></table></div>';
 		if ( $can_edit ) {
