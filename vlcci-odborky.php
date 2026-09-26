@@ -32,6 +32,7 @@ class VlcciOdborky {
 		$this->migrate_deti_typ_v6();
 		$this->migrate_stezky_v7();
 		$this->migrate_stezky_plneni_v8();
+		$this->migrate_stezky_svetlusky_v9();
 	}
 
 	private function migrate_stezky_plneni_v8(): void {
@@ -43,6 +44,36 @@ class VlcciOdborky {
 			$wpdb->query( "ALTER TABLE {$wpdb->prefix}vo_stezky_plneni DROP INDEX dite_kompetence" );
 		}
 		update_option( 'vo_migration_stezky_plneni_v8', '1' );
+	}
+
+	private function migrate_stezky_svetlusky_v9(): void {
+		if ( get_option( 'vo_migration_stezky_svetlusky_v9' ) ) return;
+		global $wpdb;
+		// Přidej sloupec typ do vo_stezky_kompetence
+		$col = $wpdb->get_results( "SHOW COLUMNS FROM {$wpdb->prefix}vo_stezky_kompetence LIKE 'typ'" );
+		if ( empty( $col ) ) {
+			$wpdb->query( "ALTER TABLE {$wpdb->prefix}vo_stezky_kompetence ADD COLUMN typ enum('vlcata','svetlusky') NOT NULL DEFAULT 'vlcata' AFTER garant" );
+		}
+		// Označ existující záznamy jako vlčata (pokud ještě nemají typ)
+		$wpdb->query( "UPDATE {$wpdb->prefix}vo_stezky_kompetence SET typ='vlcata' WHERE typ='vlcata' OR typ IS NULL" );
+		// Vlož data světlušek (pouze pokud ještě nejsou)
+		$existing = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_kompetence WHERE typ='svetlusky'" );
+		if ( $existing === 0 ) {
+			$max_poradi = (int) $wpdb->get_var( "SELECT MAX(poradi) FROM {$wpdb->prefix}vo_stezky_kompetence" );
+			$data = $this->stezky_kompetence_data_svetlusky();
+			foreach ( $data as $i => $row ) {
+				$wpdb->insert( "{$wpdb->prefix}vo_stezky_kompetence", [
+					'stupen'  => $row[0],
+					'oblast'  => $row[1],
+					'okruh'   => $row[2],
+					'popis'   => $row[3],
+					'garant'  => $row[4],
+					'typ'     => 'svetlusky',
+					'poradi'  => $max_poradi + $i + 1,
+				] );
+			}
+		}
+		update_option( 'vo_migration_stezky_svetlusky_v9', '1' );
 	}
 
 	private function migrate_nasivky_v5(): void {
@@ -236,6 +267,149 @@ class VlcciOdborky {
 			['3', 'Příroda kolem nás', 'Květiny',             "Vybarvím a pojmenuji květiny na obrázcích. Zakroužkuji ty, které jsem našel na výpravě.", 'Dustin'],
 			['3', 'Příroda kolem nás', 'Pozorování přírody',  "Splním jeden z úkolů: zapíšu rostliny a živočichy z jednoho prostředí; najdu zvířecí stopy; prozkoumám suchý strom.", 'Dustin'],
 			['3', 'Příroda kolem nás', 'Krása přírody',       "Splním jeden z úkolů: najdu zajímavou přírodninu a pojmenuji ji; vytvořím sbírku přírodnin; najdu přírodniny v co nejvíce barvách.", 'Pivoňka'],
+		];
+	}
+
+	private function stezky_kompetence_data_svetlusky(): array {
+		return [
+			["novacek", "Jak se pozná světluška", "Cesta ke slibu", "Na obrázcích vidím, jak se chovají světlušky či vlčata. Označím, co už jsem si v roji vyzkoušela. Napadnou mě i další věci?", "Klouzek"],
+			["novacek", "Moje šestka", "Cesta ke slibu", "Patřím do šestky. Náš pokřik zní.", "Klouzek"],
+			["novacek", "Moje šestka", "Cesta ke slibu", "Do rámečku si namaluji svoji šestku, nebo nalepím její fotku. Poprosím každou sestřičku ze šestky, aby se ke své podobizně podepsala, otiskla palec nebo udělala jiné znamení.", "Klouzek"],
+			["novacek", "Co s sebou na schůzku", "Cesta ke slibu", "Vyberu z těchto věcí ty, které si mám nosit s sebou na schůzku, a zakroužkuji je. Pokud něco chybí, dokreslím to.", "Klouzek"],
+			["novacek", "Můj roj", "Cesta ke slibu", "Doplním potřebné informace. (Názvy dalších šestek, jméno Velké světlušky, jméno vedoucí šestky + kontakt, jméno šestnice.)", "Klouzek"],
+			["novacek", "Zážitek", "Cesta ke slibu", "Vzpomenu si na nejlepší zážitek, který jsem v roji dosud zažila. Zážitek řeknu šestce a nakreslím, napíšu nebo do prostoru nalepím fotku, která mi ho připomene.", "Klouzek"],
+			["novacek", "Pravidla roje", "Cesta ke slibu", "Jaká pravidla bych měla ve svém roji dodržovat? (Tykání, hezké chování k ostatním, poslouchám Velkou světlušku a vedoucí, chodím včas, omlouvám se z nepřítomnosti, mluvím slušně.)", "Klouzek"],
+			["novacek", "Pozdravy", "Cesta ke slibu", "Podám si levou ruku se všemi členkami své šestky, které jsou právě přítomny.", "Klouzek"],
+			["novacek", "Pozdravy", "Cesta ke slibu", "Najdu na obrázku táborového nástupu pozdrav vlčat, světlušek, skautů a skautek, označím si je a spojím se správným rámečkem pod obrázkem.", "Klouzek"],
+			["novacek", "Znak světlušek", "Cesta ke slibu", "Vybarvím si znak světlušek a spojím, co znamenají jednotlivé části.", "Klouzek"],
+			["novacek", "Znaky", "Cesta ke slibu", "Projdu bludištěm a přiřadím názvy k jednotlivým znakům.", "Klouzek"],
+			["novacek", "Skautský kroj", "Cesta ke slibu", "Na vyznačená místa na kroji si nalepím jeho chybějící součásti. Do prázdných samolepek doplním jméno naší obce, číslo roje, znak roje a barvu šestky.", "Klouzek"],
+			["novacek", "Zákon světlušek", "Cesta ke slibu", "Spojím jednotlivé body zákona světlušek s jejich vysvětlením.", "Klouzek"],
+			["novacek", "Zákon světlušek", "Cesta ke slibu", "K obrázkům přiřadím jednotlivé body zákona světlušek.", "Klouzek"],
+			["novacek", "Heslo světlušek", "Cesta ke slibu", "Nakreslím nebo napíšu, jak se řídím heslem.", "Klouzek"],
+			["novacek", "Denní příkaz světlušek", "Cesta ke slibu", "Podívám se na obrázky a řeknu nebo jinak ztvárním, co by postavy mohly udělat, aby se zachovaly podle denního příkazu.", "Klouzek"],
+			["novacek", "Co mě baví", "Cesta ke slibu", "Napíšu nebo nakreslím několik svých zájmů. Ostatním v šestce je představím a povím, co mě na nich baví.", "Klouzek"],
+			["1", "Co umím a znám", "Ošetření", "Ukážu, jak bych ošetřila drobnou řeznou ránu, puchýř a bodnutí hmyzem.", "Klouzek"],
+			["1", "Co umím a znám", "Cena jídla", "Zjistím, kolik stojí následující potraviny v obchodě. (Jablka 0,5 kg, Chléb 1 kus, Čokoláda 100 g, Jogurt 150 g, Šunka 100 g, Mléko 1 litr, Máslo 250 g, Rohlíky 5 kusů, Vejce 10 kusů)", "Klouzek"],
+			["1", "Co umím a znám", "Pohybové aktivity", "Vyzkouším si dvě z těchto aktivit:", "Klouzek"],
+			["1", "Co umím a znám", "Pohybové aktivity", "Zaběhnout opičí dráhu nebo překážkový běh.", "Klouzek"],
+			["1", "Co umím a znám", "Pohybové aktivity", "Zdolat jednoduchou lanovou překážku.", "Klouzek"],
+			["1", "Co umím a znám", "Pohybové aktivity", "Uplavat krátkou vzdálenost.", "Klouzek"],
+			["1", "Co umím a znám", "Pohybové aktivity", "Ujet na kole, koloběžce nebo kolečkových bruslích vytyčenou dráhu.", "Klouzek"],
+			["1", "Co umím a znám", "Pohybové aktivity", "Skákat přes švihadlo zvoleným způsobem.", "Klouzek"],
+			["1", "Co umím a znám", "Pohybové aktivity", "Procvičit si házení a chytání míče, například při hře.", "Klouzek"],
+			["1", "Co umím a znám", "Tvoření", "Splním jeden z úkolů:", "Klouzek"],
+			["1", "Co umím a znám", "Tvoření", "Najdu v lese pěkné místo a postavím na něm domeček z přírodního materiálu, který je okolo.", "Klouzek"],
+			["1", "Co umím a znám", "Tvoření", "Vyrobím lodičku z kůry či ze dřeva. Pustím ji po vodě a budu sledovat, kam dopluje.", "Klouzek"],
+			["1", "Co umím a znám", "Tvoření", "Vytvořím v lese či na louce obrázek z přírodnin, které najdu kolem.", "Klouzek"],
+			["1", "Co umím a znám", "Tvoření", "Vyberu si a složím papírovou skládačku podle návodu (například loďku, vlaštovku, čepici, pohárek, …) a vyzdobím ji.", "Klouzek"],
+			["1", "Co umím a znám", "Tvoření", "Vytvořím jiný výrobek dle svého návrhu.", "Klouzek"],
+			["1", "Co umím a znám", "Vyznačení trasy", "Půjdu v přírodě po vyznačené trase (např. podle pochodových značek).\nPoté si sama nebo s kamarádkou vyzkouším značení stejným nebo jiným způsobem.", "Klouzek"],
+			["1", "Co umím a znám", "Tísňová čísla", "K obrázkům doplním tísňová telefonní čísla a ostatním v šestce řeknu, kdy se používají.", "Klouzek"],
+			["1", "Co umím a znám", "Kdo mi pomůže", "Kdo mi poradí nebo pomůže, když se mně, mému kamarádovi či kamarádce něco stane (zraním se, bude mi špatně apod.)? Doplním, za kým půjdu ve škole, na výpravě, na táboře a venku na ulici.", "Klouzek"],
+			["1", "Kdo jsem", "Dobrý skutek", "Vzpomenu si na dobrý skutek, který jsem v nedávné době vykonala, a popíšu ho ostatním.", "Klouzek"],
+			["1", "Kdo jsem", "Chování", "V příběhu najdu příklad správného a nesprávného chování postav a napíšu je. Řeknu, jak toto chování ovlivnilo pokračování příběhu.", "Klouzek"],
+			["1", "Kdo jsem", "Strach", "Napíšu, z čeho mám trochu strach. Zamyslím se, proč tento strach mám. S vedoucí nebo s někým blízkým zkusíme vymyslet, jak bych se svému strachu mohla postavit.", "Klouzek"],
+			["1", "Moje kamarádství", "Zážitek", "Vzpomenu si na nedávný společný zážitek s kamarádkami/kamarády, který mě potěšil.", "Klouzek"],
+			["1", "Moje kamarádství", "Dobré vlastnosti", "Řeknu dvěma kamarádkám ze šestky, jaké jsou jejich dvě dobré vlastnosti.", "Klouzek"],
+			["1", "Moje kamarádství", "Co jsem se naučila", "Napíšu dvě věci, které jsem se naučila od svých kamarádek.", "Klouzek"],
+			["1", "Můj domov", "Společné vyrábění", "Společně vyrobíme předmět pro šestku.", "Klouzek"],
+			["1", "Můj domov", "Pomáhám doma", "Napíšu, nakreslím, vyfotím či jinak ztvárním, jak doma pomáhám.", "Klouzek"],
+			["1", "Můj domov", "Hodnocení hry", "Ohodnotím dvě hry pomocí smajlíka a do rámečku napíšu nebo nakreslím, jak se mi líbily.", "Klouzek"],
+			["1", "Svět okolo nás", "Skautské symboly", "Vyberu si jeden ze skautských symbolů a zjistím, jaký má význam. Sama nebo s ostatními jej vyrobíme, nakreslíme nebo jinak ztvárníme.", "Klouzek"],
+			["1", "Svět okolo nás", "Pravidla", "Splním jeden z úkolů:", "Klouzek"],
+			["1", "Svět okolo nás", "Pravidla", "Zapojím se do vytváření pravidel chování naší šestky. Snažíme se vytvořit taková pravidla, abychom se všechny cítily dobře.", "Klouzek"],
+			["1", "Svět okolo nás", "Pravidla", "Zamyslím se, k čemu jsou pravidla, která dodržujeme na schůzkách a výpravách se šestkou. Společně zahrajeme scénky ukazující, proč bychom měly pravidla dodržovat.", "Klouzek"],
+			["1", "Svět okolo nás", "Cesta jídla", "Každý výrobek spojím s místy, kde se během výroby ocitne. Některá místa mohou patřit k více výrobkům.", "Klouzek"],
+			["1", "Příroda kolem nás", "Pozorování přírody", "Splním jeden z úkolů:", "Klouzek"],
+			["1", "Příroda kolem nás", "Pozorování přírody", "Najdu pěkné místo v přírodě. Nakreslím, jak bude vypadat ve čtyřech ročních obdobích.", "Klouzek"],
+			["1", "Příroda kolem nás", "Pozorování přírody", "V přírodě pojmenuji tři zvuky a zjistím, kdo nebo co je vydává.", "Klouzek"],
+			["1", "Příroda kolem nás", "Pozorování přírody", "Pojmenuji mraky na obloze podle toho, co mi připomínají.", "Klouzek"],
+			["1", "Příroda kolem nás", "Pozorování přírody", "S rojem či rodinou pozoruji hvězdy. Zjistím název a tvar jednoho souhvězdí a vymyslím si jedno vlastní.", "Klouzek"],
+			["1", "Příroda kolem nás", "Nástrahy lesa", "Pojmenuji plody a houby na obrázcích a zaškrtnu, jestli jsou jedlé, nebo jedovaté. Doplním dva další příklady, které znám.", "Klouzek"],
+			["1", "Příroda kolem nás", "Zvířata", "Pojmenuji zvířata na obrázcích a přiřadím je k prostředí, ve kterém bych je mohla vidět (pole, les, louka, rybník). Na výpravě do přírody se budu celou cestu pozorně rozhlížet. V cestičce si zakroužkuji všechna zvířata, která jsem viděla.", "Klouzek"],
+			["1", "Něco navíc", "Slova ze slibu a zákona", "K jednotlivým slovům (Pomáhat druhým, Nejvyšší Pravda a Láska, Překonávat sebe) přiřadím obrázky, které se k nim nejlépe hodí. S rojem si pak popovídáme, co jednotlivá slova znamenají a jak jim rozumíme.", "Klouzek"],
+			["1", "Zážitek na konci cestičky", "Pod hvězdami", "Během dne najdu s vedoucí v lese nebo na louce zajímavé místo mimo dohled tábořiště a označím si ho. V noci se na něj vydám znovu sama nebo se sestřičkami ze šestky a všímám si, jak místo a cesta k němu vypadají jinak než ve dne. Popíšu nebo nakreslím, co jsem zažila a jak jsem se cítila.", "Klouzek"],
+			["2", "Co umím a znám", "Ošetřování", "Ukážu, jak bych ošetřila odřeninu, drobnou popáleninu a zvrtnutý kotník.", "Klouzek"],
+			["2", "Co umím a znám", "Vím, co dělat", "Řeknu, co bych dělala v těchto situacích nebo koho bych poprosila o pomoc. Jednu situaci ztvárním scénkou. (Spolužák mi zničil učebnici; ztratila jsem klíče; nevím, kdy je nejbližší výprava a co si na ni vzít; v obchodě nemůžu najít potravinu; někdo po mně chce mé fotky, např. v plavkách; na ulici jsem našla cizí mobil; našla jsem si klíště; někdo mě obtěžuje nepříjemnými zprávami.)", "Klouzek"],
+			["2", "Co umím a znám", "Jednohubky", "Se šestkou nakoupíme suroviny a připravíme jednohubky nebo obložený chléb. Do rámečku nakreslím nebo jinak znázorním suroviny, které jsme použily.", "Klouzek"],
+			["2", "Co umím a znám", "Spojení na dálku", "Splním dva úkoly:", "Klouzek"],
+			["2", "Co umím a znám", "Spojení na dálku", "Zavolám vedoucí (potvrdím účast na výpravě, omluvím se ze schůzky, …).", "Klouzek"],
+			["2", "Co umím a znám", "Spojení na dálku", "Pošlu textovou nebo hlasovou zprávu kamarádovi nebo kamarádce (domluvíme se na společném setkání, ohledně úkolu do školy apod.).", "Klouzek"],
+			["2", "Co umím a znám", "Spojení na dálku", "Představím šestce užitečnou komunikační aplikaci (např. v mobilu nebo tabletu).", "Klouzek"],
+			["2", "Co umím a znám", "Spojení na dálku", "Napíšu e-mail vedoucí (omluvím se ze schůzky, zeptám se na něco k výpravě, …).", "Klouzek"],
+			["2", "Co umím a znám", "Spojení na dálku", "Napíšu a odešlu pohled nebo dopis.", "Klouzek"],
+			["2", "Co umím a znám", "Oheň", "Pomůžu připravit oheň, zapálím ho a udržuji. Po ohni pomůžu uklidit.", "Klouzek"],
+			["2", "Co umím a znám", "Orientace na mapě", "Zorientuji mapu (podle buzoly, výrazných orientačních bodů, …) a ukážu svou polohu na mapě.", "Klouzek"],
+			["2", "Kdo jsem", "Radost", "Řeknu nebo napíšu, co mi dělá radost.", "Klouzek"],
+			["2", "Kdo jsem", "Naslouchání", "Posadím se na klidné místo a se zavřenýma očima budu pět minut naslouchat svému okolí a svým myšlenkám. Šestce řeknu, co jsem slyšela a co mě napadalo.", "Klouzek"],
+			["2", "Kdo jsem", "Krása", "Ukážu šestce písničku, básničku, fotku nebo obrázek, který mi přijde krásný. Ostatním řeknu, co se mi na něm líbí.", "Klouzek"],
+			["2", "Kdo jsem", "Jak se zachovat", "Společně se šestkou se zamyslíme, jak bychom se zachovaly v následujících situacích. Dvě z nich ztvárníme scénkou. Poté si řekneme, jestli jsme se ve scénkách zachovaly podle světluškovského zákona.", "Klouzek"],
+			["2", "Kdo jsem", "Jak se zachovat", "Omylem rozbiješ maminčinu oblíbenou vázu.", "Klouzek"],
+			["2", "Kdo jsem", "Jak se zachovat", "Rozliješ ve školní jídelně trochu polévky na stůl.", "Klouzek"],
+			["2", "Kdo jsem", "Jak se zachovat", "Jdeš lesem a na zemi uvidíš plastovou láhev.", "Klouzek"],
+			["2", "Kdo jsem", "Jak se zachovat", "V obchodě se cizí paní před tebou roztrhne sáček s pomeranči.", "Klouzek"],
+			["2", "Kdo jsem", "Jak se zachovat", "Vymysli nějakou vlastní situaci, která se vztahuje k zákonu.", "Klouzek"],
+			["2", "Kdo jsem", "Řeč těla", "Popíšu, co vyjadřují následující obrázky.", "Klouzek"],
+			["2", "Kdo jsem", "Překonej se!", "Řeknu šestce, kdy a jak jsem se překonala. Co mi k tomu pomohlo?", "Klouzek"],
+			["2", "Moje kamarádství", "Jak se k sobě chováme", "Ztvárním, co se mi líbí na našem vzájemném chování v šestce. Společně si o tom popovídáme.", "Klouzek"],
+			["2", "Moje kamarádství", "Důvěra", "Řeknu nebo napíšu, komu nejvíce důvěřuji a proč.", "Klouzek"],
+			["2", "Moje kamarádství", "Dělám radost", "Udělám někomu radost.", "Klouzek"],
+			["2", "Můj domov", "Moje rodina", "Spolu s rodiči nebo sourozenci vyberu fotku nebo věc, která vystihuje naši rodinu. Ostatním řeknu, co mám na své rodině ráda.", "Klouzek"],
+			["2", "Můj domov", "Hodnocení výpravy", "Se šestkou zahrajeme scénku, napíšeme nebo nakreslíme, co se nám líbilo a nelíbilo na výpravě.", "Klouzek"],
+			["2", "Svět okolo nás", "Zajímavost v okolí", "Představím šestce zajímavost z naší obce či okolí a řeknu, proč mě zaujala.", "Klouzek"],
+			["2", "Svět okolo nás", "Původ věcí", "Do tabulky zapíšu věci podle svého výběru. Zjistím, z jaké země která věc pochází a jak dalekou cestu musela urazit až ke mně.\n\n(Oblíbená potravina, kus oblečení, oblíbená hračka)", "Klouzek"],
+			["2", "Svět okolo nás", "Jedinečnost", "Co máme společného všechny v šestce? U každé sestřičky v šestce řeknu, v čem je jedinečná. Čím by její jedinečnost mohla být přínosem celé šestce?", "Klouzek"],
+			["2", "Svět okolo nás", "Správné chování", "Jak by se postavy na obrázcích měly správně zachovat? Do prázdných bublin doplním, co by která postava mohla říkat.", "Klouzek"],
+			["2", "Svět okolo nás", "Tábor", "Splním jeden z úkolů:", "Klouzek"],
+			["2", "Svět okolo nás", "Tábor", "Namaluji nebo popíšu náš tábor. Řeknu, v čem se liší od tábora na fotce a v čem jsou si oba tábory podobné.", "Klouzek"],
+			["2", "Svět okolo nás", "Tábor", "Pokud jsem ještě na táboře nebyla, napíšu nebo nakreslím, v čem se mi líbí tábor na fotce a v čem ne, a co bych chtěla vyzkoušet, až na tábor pojedu.", "Klouzek"],
+			["2", "Příroda kolem nás", "Šetrné chování", "Splním jeden z úkolů:", "Klouzek"],
+			["2", "Příroda kolem nás", "Šetrné chování", "Při které činnosti spotřebuji nejvíce vody? Vymyslím, jak bych mohla vodou šetřit. Plán představím šestce.", "Klouzek"],
+			["2", "Příroda kolem nás", "Šetrné chování", "Dva dny budu počítat všechny jednorázové obaly od svých školních svačin. Třetí den si nachystám svačinu sama a použiji co nejméně obalů.", "Klouzek"],
+			["2", "Příroda kolem nás", "Šetrné chování", "Se šestkou uklidíme drobný nepořádek (např. v okolí klubovny). Odpadky roztřídíme do správných kontejnerů.", "Klouzek"],
+			["2", "Příroda kolem nás", "Stromy", "Podle obrázků najdu alespoň pět listů nebo větviček. Pomocí barev je obtisknu vedle obrázku. Do rámečku k obrázkům napíšu název stromu.", "Klouzek"],
+			["2", "Příroda kolem nás", "Výprava do přírody", "S rojem nebo rodinou se vydáme na dobrodružnou expedici někam, kde jsem ještě nebyla (podél řeky či potoka, okraje lesa, na rozhlednu či kopec, podél hranice republiky, okresu nebo kraje). Z výletu si můžu přinést pěknou přírodninu na památku.", "Klouzek"],
+			["2", "Něco navíc", "Pokračování příběhu", "Přečtu si příběh o Julince, Samovi a vyklízení myčky. Zamyslím se nad jeho pokračováním a nad tím, jak bych se v dané situaci zachovala. Pokračování napíšu nebo namaluji.", "Klouzek"],
+			["2", "Zážitek na konci cestičky", "Noc v lese", "Spolu s vedoucí a sestřičkami ze šestky strávím noc v lese – pod širákem nebo v přístřešku z přírodního materiálu, který společně postavíme. Pozoruji hvězdy a poslouchám noční les. Popíšu nebo nakreslím, jak jsem Noc v lese prožila.", "Klouzek"],
+			["3", "Co umím a znám", "Bezpečná cesta", "Provedu bezpečně ostatní okolo klubovny či obcí. Poukážu na možná nebezpečí. Vysvětlím cestou značky, které potkáme a které mají vliv na naši bezpečnost.", "Klouzek"],
+			["3", "Co umím a znám", "Co si koupím?", "Napíšu, co bych si chtěla koupit (např. v hodnotě svého kapesného, za cenu 100 Kč). Zakroužkuji věci, které jsou opravdu užitečné. Škrtnu ty, které si můžu odepřít a peníze ušetřit.", "Klouzek"],
+			["3", "Co umím a znám", "První pomoc", "Co udělám, když najdu někoho blízkého, jak nehybně leží a neodpovídá mi? Jednotlivé kroky správně seřadím.", "Klouzek"],
+			["3", "Co umím a znám", "Přivolání pomoci", "V hraném telefonátu si vyzkouším přivolat pomoc k různým situacím. Do telefonu řeknu vše, co je potřeba. (Najdu člověka, který hodně krvácí; vidím hořet zahradní chatku; přijedu na kole k dopravní nehodě.)", "Klouzek"],
+			["3", "Co umím a znám", "Vyhledávání informací", "S pomocí vedoucí si vyberu otázku, na kterou neznám odpověď (např. Je vesmír nekonečný? Bude zítra pršet?). Najdu odpovědi ve dvou různých zdrojích a výsledky porovnám. Řeknu, jestli odpovědím věřím a proč.", "Klouzek"],
+			["3", "Co umím a znám", "Pracuji na sobě", "Po domluvě s vedoucí nebo rodiči vydržím tři dny bez něčeho (např. bez sladkostí, bez hraní her na tabletu, počítači a mobilu, …). Když se mi to povedlo, vybarvím si večer jednu lucernu.", "Klouzek"],
+			["3", "Kdo jsem", "Dodržování slibu", "Jeden den se více než obvykle soustředím na dodržování světluškovského slibu. Večer se zamyslím, jak se mi ho dařilo plnit. Svá zjištění jakkoliv ztvárním. O plnění si popovídám s vedoucí.", "Klouzek"],
+			["3", "Kdo jsem", "Beze slov", "Předvedu, jak bych beze slov vyjádřila tři z těchto pocitů: mám někoho ráda, jsem zklamaná, jsem s někým ráda, jsem součástí skupiny, s něčím nesouhlasím, někoho podporuji, mám strach.", "Klouzek"],
+			["3", "Kdo jsem", "Důvěra", "Napíšu, proč si myslím, že mi rodina a kamarádi můžou důvěřovat.", "Klouzek"],
+			["3", "Kdo jsem", "Písnička", "Se zavřenýma očima si se šestkou poslechneme písničku. Poté si vzájemně řekneme, co se nám na ní líbilo a nelíbilo.", "Klouzek"],
+			["3", "Kdo jsem", "Dobré vlastnosti", "Napíšu tři své dobré vlastnosti.", "Klouzek"],
+			["3", "Kdo jsem", "Chci se zlepšit", "Vyberu si jednu věc, ve které se chci zlepšit, a během vybraného období se o to pokusím. Na konci období řeknu, jak se mi to povedlo.", "Klouzek"],
+			["3", "Moje kamarádství", "Naučím něco užitečného", "Zkusím sestřičku z roje naučit něco, co ještě nedělala (uvázat dobráček, ořezat klacek na špekáček, škrtnout sirkou, …).", "Klouzek"],
+			["3", "Moje kamarádství", "Společenská hra", "Spolu s kamarádem nebo kamarádkou si zahrajeme deskovou nebo karetní hru.", "Klouzek"],
+			["3", "Moje kamarádství", "Spor", "Vzpomenu si na situaci, ve které se podařilo vyřešit spor, nebo situaci najdu v příběhu. Co bylo pro řešení sporu důležité?", "Klouzek"],
+			["3", "Můj domov", "Moji předkové", "Zeptám se rodičů na jednoho z našich předků. Jakou měl/a práci? Co ho/ji bavilo? Ostatním v šestce řeknu, co mě na vyprávění o něm/ní zaujalo.", "Klouzek"],
+			["3", "Můj domov", "Příprava hry", "Po domluvě s vedoucí připravím sama nebo s někým krátkou hru, kterou si se šestkou zahrajeme. Na konci hry mi ostatní řeknou, co se jim na hře líbilo a co ne. S vedoucí si popovídám o tom, jestli s hodnocením ostatních souhlasím.", "Klouzek"],
+			["3", "Svět okolo nás", "Historie skautingu", "Se svou šestkou zahrajeme scénku z historie skautingu (světového, českého nebo místního).", "Klouzek"],
+			["3", "Svět okolo nás", "Zájem o obec", "Splním jeden z úkolů:", "Klouzek"],
+			["3", "Svět okolo nás", "Zájem o obec", "Zúčastním se akce pro veřejnost v naší obci a povím šestce, co jsem tam zažila.", "Klouzek"],
+			["3", "Svět okolo nás", "Zájem o obec", "Najdu v obci změnu, která se mi líbí, vyfotím ji a fotku ukážu šestce (např. opravení kašny, vytvoření nového parku, hřiště, …). Proč si myslím, že ke změně došlo?", "Klouzek"],
+			["3", "Svět okolo nás", "Zájem o obec", "Navrhnu, co by se v naší obci mohlo změnit, aby nám tam bylo lépe. Existuje něco, co bych pro to mohla udělat já? Svoje nápady představím šestce.", "Klouzek"],
+			["3", "Svět okolo nás", "Zájem o obec", "Vyberu si historický příběh nebo pověst z naší obce, který převyprávím šestce nebo namaluji. Přečtu si nebo poslechnu jeden příběh, který jsem dosud neznala.", "Klouzek"],
+			["3", "Svět okolo nás", "Spravedlnost", "Vyberu si příběh a najdu v něm, kdo rozhodl spravedlivě a kdo nespravedlivě. Jaký vliv měla rozhodnutí na pokračování příběhu?", "Klouzek"],
+			["3", "Svět okolo nás", "Domlouvání programu", "V šestce navrhneme, jaký program by se nám líbil na schůzkách nebo výpravách. Vybereme pět nápadů, na kterých se domluvíme, a řekneme je vedoucí.", "Klouzek"],
+			["3", "Svět okolo nás", "Výroba věcí", "Vyberu si jeden předmět ve svém okolí (oblečení, knížku, hračku, …) a řeknu, z čeho je vyrobený. Kolik lidí (kterých povolání) ho muselo vzít do ruky, než se dostal až ke mně?", "Klouzek"],
+			["3", "Příroda kolem nás", "Změny v přírodě", "Na starých fotkách si vyberu jedno místo, na které se zajdu podívat. Jak se od té doby změnilo? Ovlivnil některé změny člověk?", "Klouzek"],
+			["3", "Příroda kolem nás", "Květiny", "Vybarvím květiny na obrázcích a do rámečků dopíšu jejich názvy z nabídky (sedmikráska, jetel, pryskyřník, kopřiva, hluchavka, pampeliška, pomněnka, sasanka, vlčí mák). Může mi pomoci knížka nebo internet. Zakroužkuji květiny, které jsem našla na výpravě nebo v okolí klubovny.", "Klouzek"],
+			["3", "Příroda kolem nás", "Pozorování přírody", "Splním jeden z úkolů:", "Klouzek"],
+			["3", "Příroda kolem nás", "Pozorování přírody", "Vyberu si jedno prostředí (potok, rybník, louku, les, …) a při jeho návštěvě zapíšu, nakreslím nebo vyfotím rostliny a živočichy, kteří zde žijí. Zjistím dvě zajímavé informace o organismu, který mě nejvíce zaujal.", "Klouzek"],
+			["3", "Příroda kolem nás", "Pozorování přírody", "Najdu několik zvířecích stop (okousané listy nebo šišky, dutiny ve stromě, myší stezky, otisky v blátě, …). Své nálezy zapíšu, nakreslím nebo vyfotím. Zjistím, kterým zvířatům by mohly patřit.", "Klouzek"],
+			["3", "Příroda kolem nás", "Pozorování přírody", "Najdu suchý strom a dovedu k němu šestku. Vysvětlím, jak se liší od živého. Zjistím tři důvody, proč strom může uschnout.", "Klouzek"],
+			["3", "Příroda kolem nás", "Krása přírody", "Splním jeden z úkolů:", "Klouzek"],
+			["3", "Příroda kolem nás", "Krása přírody", "Najdu co nejzajímavější přírodninu (tvarem, velikostí, barvou, …) a pojmenuji ji podle toho, co mi připomíná. V roji uspořádáme výstavu nalezených předmětů.", "Klouzek"],
+			["3", "Příroda kolem nás", "Krása přírody", "Vytvořím si sbírku přírodnin různých velikostí, tvarů a barev. Nalezené přírodniny správně pojmenuji nebo jim vymyslím vlastní názvy.", "Klouzek"],
+			["3", "Příroda kolem nás", "Krása přírody", "Najdu přírodniny v co nejvíce barvách. Ke které barvě se mi nepodařilo najít žádnou přírodninu a od které barvy jich bylo nejvíce?", "Klouzek"],
+			["3", "Něco navíc", "Co ze mě dělá světlušku", "Do rámečku si nalepím svoji fotku nebo se nakreslím. Napíšu nebo nakreslím, co všechno ze mě dělá světlušku. Pomoci mi může zákon nebo slib světlušek.", "Klouzek"],
+			["3", "Zážitek na konci cestičky", "Za sluncem", "S vedoucí nebo sestřičkami ze šestky se vydám na vyvýšené místo a sleduji západ slunce. Vzpomeneme si, co jsme na cestičce zažily, naučily se a v čem jsme se překonaly, a znovu si přečteme slib světlušek. Po západu slunce zapálíme svíčku. Popíšu nebo nakreslím, jak jsem cestu Za sluncem prožila.", "Klouzek"],
 		];
 	}
 
@@ -2264,8 +2438,12 @@ class VlcciOdborky {
 		$vedouci = get_current_user_id();
 		$count   = 0;
 		foreach ( $sestka_ids as $sestka_id ) {
+			$s_typ = $wpdb->get_var( $wpdb->prepare(
+				"SELECT o.typ FROM {$wpdb->prefix}vo_sestky s JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE s.id=%d", $sestka_id
+			) );
+			$s_clen_typ = $s_typ === 'svetlusky' ? 'svetluska' : 'vlce';
 			$deti = $wpdb->get_results( $wpdb->prepare(
-				"SELECT id FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 AND clen_typ='vlce'", $sestka_id
+				"SELECT id FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 AND clen_typ=%s", $sestka_id, $s_clen_typ
 			) );
 			foreach ( $deti as $d ) {
 				$rows = $wpdb->query( $wpdb->prepare(
@@ -2275,7 +2453,7 @@ class VlcciOdborky {
 				$count += (int) $rows;
 			}
 		}
-		$this->app_set_flash( 'Kompetence uznána ' . $count . ' vlčatům.' );
+		$this->app_set_flash( 'Kompetence uznána ' . $count . ' členům.' );
 		$this->app_redirect( $base, 'stezky' );
 	}
 
@@ -2309,14 +2487,14 @@ class VlcciOdborky {
 		$kompetence_id = intval( $_POST['kompetence_id'] ?? 0 );
 		$raw_ids       = array_map( 'intval', (array) ( $_POST['dite_ids'] ?? [] ) );
 		if ( ! $kompetence_id || empty( $raw_ids ) ) {
-			$this->app_set_flash( 'Nevybráno žádné vlče.', 'error' );
+			$this->app_set_flash( 'Nevybrán žádný člen.', 'error' );
 			$this->app_redirect( $base, 'zapsat_stezku', [ 'kompetence_id' => $kompetence_id ] );
 		}
 		$datum   = gmdate( 'Y-m-d' );
 		$vedouci = get_current_user_id();
 		$count   = 0;
 		foreach ( $raw_ids as $dite_id ) {
-			$d = $wpdb->get_row( $wpdb->prepare( "SELECT sestka_id FROM {$wpdb->prefix}vo_deti WHERE id=%d AND aktivni=1 AND clen_typ='vlce'", $dite_id ) );
+			$d = $wpdb->get_row( $wpdb->prepare( "SELECT sestka_id FROM {$wpdb->prefix}vo_deti WHERE id=%d AND aktivni=1", $dite_id ) );
 			if ( ! $d || ! $this->can_edit_sestka( (int) $d->sestka_id ) ) continue;
 			$rows = $wpdb->query( $wpdb->prepare(
 				"INSERT INTO {$wpdb->prefix}vo_stezky_plneni (dite_id,kompetence_id,datum,poznamka,vedouci_id) VALUES (%d,%d,%s,'',%d)",
@@ -2331,14 +2509,17 @@ class VlcciOdborky {
 	private function app_page_zapsat_stezku(): void {
 		global $wpdb;
 		$all_sestky = $wpdb->get_results(
-			"SELECT s.id, s.nazev, o.nazev AS oddil_nazev FROM {$wpdb->prefix}vo_sestky s
-			 JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE o.typ='vlcata' ORDER BY o.nazev, s.nazev"
+			"SELECT s.id, s.nazev, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_sestky s
+			 JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE o.typ IN ('vlcata','svetlusky') ORDER BY o.nazev, s.nazev"
 		) ?: [];
 		$edit_sestky = array_values( array_filter( $all_sestky, fn($s) => $this->can_edit_sestka( (int)$s->id ) ) );
 		echo '<h1 class="voa-page-title">✍️ Zapsat splnění kompetence</h1>';
-		if ( empty( $edit_sestky ) ) { echo '<div class="voa-empty">Žádné vlčácké šestky.</div>'; return; }
+		if ( empty( $edit_sestky ) ) { echo '<div class="voa-empty">Žádné šestky se stezkami.</div>'; return; }
+		// Sestav unikátní typy šestek pro filtr kompetencí
+		$sestky_typy = array_unique( array_column( $edit_sestky, 'typ' ) );
+		$typy_sql    = implode( "','", array_map( 'esc_sql', $sestky_typy ) );
 		// Výběr kompetence (GET formulář)
-		$kompetence_all = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_stezky_kompetence ORDER BY poradi" ) ?: [];
+		$kompetence_all = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_stezky_kompetence WHERE typ IN ('$typy_sql') ORDER BY poradi" ) ?: [];
 		$stupne         = $this->stezky_stupne();
 		$sel_id         = intval( $_GET['kompetence_id'] ?? 0 );
 		echo '<form method="get" class="voa-form-inline" style="margin-bottom:20px">';
@@ -2360,7 +2541,7 @@ class VlcciOdborky {
 			}
 			echo '</optgroup>';
 		}
-		echo '</select> <button class="voa-btn voa-btn-primary" style="margin-left:8px">Zobrazit vlčata</button></form>';
+		echo '</select> <button class="voa-btn voa-btn-primary" style="margin-left:8px">Zobrazit členy</button></form>';
 		if ( ! $sel_id ) return;
 		$k_row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_stezky_kompetence WHERE id=%d", $sel_id ) );
 		if ( ! $k_row ) { echo '<div class="voa-empty">Kompetence nenalezena.</div>'; return; }
@@ -2382,19 +2563,21 @@ class VlcciOdborky {
 			$r->vedouci_jmeno = $vj_cache2[ $uid ];
 			$splneni_map[ $r->dite_id ][] = $r;
 		}
+		// Zjisti komp_typ z vybrané kompetence
+		$sel_komp_typ = $k_row->typ ?? 'vlcata';
 		// Zjisti, kdo má splněného Nováčka (pokud je potřeba)
 		$ma_novacka = [];
 		if ( $vyzaduje_novacka ) {
-			$total_nov = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_kompetence WHERE stupen='novacek'" );
+			$total_nov = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_kompetence WHERE stupen='novacek' AND typ=%s", $sel_komp_typ ) );
 			if ( $total_nov > 0 ) {
-				$nov_rows = $wpdb->get_results(
+				$nov_rows = $wpdb->get_results( $wpdb->prepare(
 					"SELECT sp.dite_id, COUNT(DISTINCT sp.kompetence_id) AS done
 					 FROM {$wpdb->prefix}vo_stezky_plneni sp
 					 JOIN {$wpdb->prefix}vo_stezky_kompetence k ON k.id=sp.kompetence_id
 					 JOIN {$wpdb->prefix}vo_deti d ON d.id=sp.dite_id
-					 WHERE k.stupen='novacek' AND d.sestka_id IN ($sestka_ids_list)
-					 GROUP BY sp.dite_id"
-				) ?: [];
+					 WHERE k.stupen='novacek' AND k.typ=%s AND d.sestka_id IN ($sestka_ids_list)
+					 GROUP BY sp.dite_id", $sel_komp_typ
+				) ) ?: [];
 				foreach ( $nov_rows as $r ) {
 					if ( (int) $r->done >= $total_nov ) $ma_novacka[ $r->dite_id ] = true;
 				}
@@ -2408,8 +2591,9 @@ class VlcciOdborky {
 		echo '<input type="hidden" name="_vo_app_action" value="hromadne_stezka_deti">';
 		echo '<input type="hidden" name="kompetence_id" value="' . $sel_id . '">';
 		foreach ( $edit_sestky as $s ) {
+			$s_clen_typ = ( $s->typ ?? 'vlcata' ) === 'svetlusky' ? 'svetluska' : 'vlce';
 			$deti = $wpdb->get_results( $wpdb->prepare(
-				"SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 AND clen_typ='vlce' ORDER BY prijmeni, jmeno", $s->id
+				"SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 AND clen_typ=%s ORDER BY prijmeni, jmeno", $s->id, $s_clen_typ
 			) ) ?: [];
 			if ( empty( $deti ) ) continue;
 			echo '<div class="voa-card" style="margin-bottom:12px">';
@@ -2489,15 +2673,15 @@ class VlcciOdborky {
 		];
 	}
 
-	private function stezky_progress( int $dite_id, string $stupen ): array {
+	private function stezky_progress( int $dite_id, string $stupen, string $komp_typ = 'vlcata' ): array {
 		global $wpdb;
 		$total = (int) $wpdb->get_var( $wpdb->prepare(
-			"SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_kompetence WHERE stupen=%s", $stupen
+			"SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_kompetence WHERE stupen=%s AND typ=%s", $stupen, $komp_typ
 		) );
 		$done = (int) $wpdb->get_var( $wpdb->prepare(
 			"SELECT COUNT(DISTINCT sp.kompetence_id) FROM {$wpdb->prefix}vo_stezky_plneni sp
 			 JOIN {$wpdb->prefix}vo_stezky_kompetence k ON k.id=sp.kompetence_id
-			 WHERE sp.dite_id=%d AND k.stupen=%s", $dite_id, $stupen
+			 WHERE sp.dite_id=%d AND k.stupen=%s AND k.typ=%s", $dite_id, $stupen, $komp_typ
 		) );
 		return [ 'total' => $total, 'done' => $done, 'splneno' => $done >= $total && $total > 0 ];
 	}
@@ -2508,38 +2692,43 @@ class VlcciOdborky {
 			"SELECT s.id, s.nazev, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_sestky s
 			 JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id ORDER BY o.nazev, s.nazev"
 		) ?: [];
-		$vlcata_sestky = array_filter( $all_sestky, function( $s ) {
-			return $s->typ === 'vlcata' || $this->is_admin();
-		} );
+		$stezky_sestky = array_filter( $all_sestky, fn($s) => in_array( $s->typ, [ 'vlcata', 'svetlusky' ], true ) );
 		if ( ! $this->is_admin() ) {
-			$vlcata_sestky = array_filter( $vlcata_sestky, fn($s) => $this->can_edit_sestka( (int)$s->id ) );
+			$stezky_sestky = array_filter( $stezky_sestky, fn($s) => $this->can_edit_sestka( (int)$s->id ) );
 		}
 		$sestka_id = intval( $_GET['sestka_id'] ?? 0 );
-		if ( ! $sestka_id && ! empty( $vlcata_sestky ) ) {
-			$first = reset( $vlcata_sestky );
+		if ( ! $sestka_id && ! empty( $stezky_sestky ) ) {
+			$first = reset( $stezky_sestky );
 			$sestka_id = (int) $first->id;
 		}
-		echo '<h1 class="voa-page-title">🗺️ Stezky vlčat</h1>';
-		if ( empty( $vlcata_sestky ) ) {
-			echo '<div class="voa-empty">Žádné šestky vlčat.</div>'; return;
+		echo '<h1 class="voa-page-title">🗺️ Stezky</h1>';
+		if ( empty( $stezky_sestky ) ) {
+			echo '<div class="voa-empty">Žádné šestky se stezkami.</div>'; return;
 		}
 		echo '<div class="voa-tabs">';
-		foreach ( $vlcata_sestky as $s ) {
+		foreach ( $stezky_sestky as $s ) {
 			$active = (int)$s->id === $sestka_id ? ' voa-tab--active' : '';
 			echo '<a href="' . esc_url( $this->app_url( 'stezky', [ 'sestka_id' => $s->id ] ) ) . '" class="voa-tab' . $active . '">' . esc_html( $s->oddil_nazev . ' — ' . $s->nazev ) . '</a>';
 		}
 		echo '</div>';
 		if ( ! $sestka_id ) return;
+		$sestka_row = $wpdb->get_row( $wpdb->prepare(
+			"SELECT s.*, o.typ AS oddil_typ FROM {$wpdb->prefix}vo_sestky s JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE s.id=%d", $sestka_id
+		) );
+		$oddil_typ  = $sestka_row->oddil_typ ?? 'vlcata';
+		$komp_typ   = $oddil_typ; // 'vlcata' nebo 'svetlusky'
+		$clen_typ   = $oddil_typ === 'svetlusky' ? 'svetluska' : 'vlce';
+		$clen_label = $oddil_typ === 'svetlusky' ? 'Světluška' : 'Vlče';
 		$deti = $wpdb->get_results( $wpdb->prepare(
-			"SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 AND clen_typ='vlce' ORDER BY prijmeni, jmeno", $sestka_id
+			"SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 AND clen_typ=%s ORDER BY prijmeni, jmeno", $sestka_id, $clen_typ
 		) ) ?: [];
 		if ( empty( $deti ) ) {
-			echo '<div class="voa-empty">V této šestce nejsou žádná aktivní vlčata.</div>'; return;
+			echo '<div class="voa-empty">V této šestce nejsou žádní aktivní členové.</div>'; return;
 		}
 		$stupne  = $this->stezky_stupne();
 		$can_edit = $this->can_edit_sestka( $sestka_id );
 		echo '<div class="voa-card" style="overflow-x:auto"><table class="voa-table">';
-		echo '<thead><tr><th>Vlče</th>';
+		echo '<thead><tr><th>' . esc_html( $clen_label ) . '</th>';
 		foreach ( $stupne as $sk => $sl ) echo '<th>' . esc_html( $sl ) . '</th>';
 		echo '<th></th></tr></thead><tbody>';
 		foreach ( $deti as $d ) {
@@ -2548,10 +2737,10 @@ class VlcciOdborky {
 			) ) ?: [];
 			$m = [];
 			foreach ( $milniky as $mk ) $m[ $mk->typ ] = $mk->datum;
-			$nov = $this->stezky_progress( (int)$d->id, 'novacek' );
+			$nov = $this->stezky_progress( (int)$d->id, 'novacek', $komp_typ );
 			echo '<tr><td><strong>' . esc_html( $d->prezdivka ) . '</strong><br><span class="voa-muted">' . esc_html( $d->prijmeni . ' ' . $d->jmeno ) . '</span></td>';
 			foreach ( $stupne as $sk => $sl ) {
-				$p = $this->stezky_progress( (int)$d->id, $sk );
+				$p = $this->stezky_progress( (int)$d->id, $sk, $komp_typ );
 				$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
 				if ( $p['splneno'] ) {
 					echo '<td>✅ ' . $p['done'] . '/' . $p['total'] . '</td>';
@@ -2559,11 +2748,12 @@ class VlcciOdborky {
 					echo '<td><div class="voa-progress-bar-wrap voa-progress-bar-wrap--md"><div class="voa-progress-bar-fill voa-progress-bar-fill--orange" style="width:' . $pct . '%"></div></div><span class="voa-progress-text">' . $p['done'] . '/' . $p['total'] . '</span></td>';
 				}
 			}
+			$slib_label = $oddil_typ === 'svetlusky' ? 'Slib světlušky' : 'Slib vlčete';
 			$badges = '';
 			if ( $nov['splneno'] && ! isset( $m['slib'] ) ) $badges .= ' <span class="voa-badge voa-badge--yellow">⚡ Může skládat slib</span>';
-			if ( isset( $m['slib'] ) ) $badges .= ' <span class="voa-badge voa-badge--green">📜 Slib ' . esc_html( $m['slib'] ) . '</span>';
+			if ( isset( $m['slib'] ) ) $badges .= ' <span class="voa-badge voa-badge--green">📜 ' . esc_html( $slib_label ) . ' ' . esc_html( $m['slib'] ) . '</span>';
 			foreach ( [ '1' => 'nasivka_1', '2' => 'nasivka_2', '3' => 'nasivka_3' ] as $st => $mtyp ) {
-				$pr = $this->stezky_progress( (int)$d->id, $st );
+				$pr = $this->stezky_progress( (int)$d->id, $st, $komp_typ );
 				if ( $pr['splneno'] && ! isset( $m[ $mtyp ] ) ) $badges .= ' <span class="voa-badge voa-badge--yellow">⚡ Nášivka ' . $st . '. st.</span>';
 				if ( isset( $m[ $mtyp ] ) ) $badges .= ' <span class="voa-badge voa-badge--green">🏅 Nášivka ' . $st . '. st. ' . esc_html( $m[ $mtyp ] ) . '</span>';
 			}
@@ -2572,45 +2762,69 @@ class VlcciOdborky {
 		echo '</tbody></table></div>';
 		if ( $can_edit ) {
 			echo '<details class="voa-card" style="margin-top:16px"><summary style="cursor:pointer;font-weight:600;padding:8px 0">⚙️ Správa kompetencí (hromadné uznání, garanti)</summary>';
-			$this->app_stezky_sprava();
+			$this->app_stezky_sprava( $sestka_id );
 			echo '</details>';
 		}
 	}
 
-	private function app_stezky_sprava(): void {
+	private function app_stezky_sprava( int $current_sestka_id = 0 ): void {
 		global $wpdb;
-		$all_sestky = $wpdb->get_results(
+		// Zjisti typ aktuální šestky
+		$current_typ = 'vlcata';
+		if ( $current_sestka_id ) {
+			$ct = $wpdb->get_var( $wpdb->prepare(
+				"SELECT o.typ FROM {$wpdb->prefix}vo_sestky s JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE s.id=%d", $current_sestka_id
+			) );
+			if ( $ct ) $current_typ = $ct;
+		}
+		$clen_typ = $current_typ === 'svetlusky' ? 'svetluska' : 'vlce';
+		$all_sestky = $wpdb->get_results( $wpdb->prepare(
 			"SELECT s.id, s.nazev, o.nazev AS oddil_nazev, o.typ FROM {$wpdb->prefix}vo_sestky s
-			 JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE o.typ='vlcata' ORDER BY o.nazev, s.nazev"
-		) ?: [];
+			 JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE o.typ=%s ORDER BY o.nazev, s.nazev", $current_typ
+		) ) ?: [];
 		$edit_sestky = array_values( array_filter( $all_sestky, fn($s) => $this->can_edit_sestka( (int)$s->id ) ) );
 		if ( empty( $edit_sestky ) ) { echo '<div class="voa-empty">Žádné šestky.</div>'; return; }
-		$kompetence = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_stezky_kompetence ORDER BY poradi" ) ?: [];
+		$kompetence = $wpdb->get_results( $wpdb->prepare(
+			"SELECT * FROM {$wpdb->prefix}vo_stezky_kompetence WHERE typ=%s ORDER BY poradi", $current_typ
+		) ) ?: [];
 		$stupne = $this->stezky_stupne();
-		// Pro každou (kompetence_id, sestka_id) zjisti, zda mají splnění všechna aktivní vlčata
+		// Pro každou (kompetence_id, sestka_id) zjisti, zda mají splnění všichni aktivní členové
 		$sestka_ids_list = implode( ',', array_map( 'intval', array_column( $edit_sestky, 'id' ) ) );
 		$splneno_sestky = []; // [ kompetence_id ][ sestka_id ] = true
 		if ( $sestka_ids_list ) {
-			$totals = $wpdb->get_results(
+			$totals = $wpdb->get_results( $wpdb->prepare(
 				"SELECT sestka_id, COUNT(*) AS total FROM {$wpdb->prefix}vo_deti
-				 WHERE sestka_id IN ($sestka_ids_list) AND aktivni=1 AND clen_typ='vlce'
-				 GROUP BY sestka_id"
-			) ?: [];
+				 WHERE sestka_id IN ($sestka_ids_list) AND aktivni=1 AND clen_typ=%s
+				 GROUP BY sestka_id", $clen_typ
+			) ) ?: [];
 			$total_per_sestka = [];
 			foreach ( $totals as $t ) $total_per_sestka[ $t->sestka_id ] = (int) $t->total;
-			$done_rows = $wpdb->get_results(
+			$done_rows = $wpdb->get_results( $wpdb->prepare(
 				"SELECT d.sestka_id, sp.kompetence_id, COUNT(DISTINCT sp.dite_id) AS done
 				 FROM {$wpdb->prefix}vo_stezky_plneni sp
 				 JOIN {$wpdb->prefix}vo_deti d ON d.id=sp.dite_id
-				 WHERE d.sestka_id IN ($sestka_ids_list) AND d.aktivni=1 AND d.clen_typ='vlce'
-				 GROUP BY d.sestka_id, sp.kompetence_id"
-			) ?: [];
+				 WHERE d.sestka_id IN ($sestka_ids_list) AND d.aktivni=1 AND d.clen_typ=%s
+				 GROUP BY d.sestka_id, sp.kompetence_id", $clen_typ
+			) ) ?: [];
 			foreach ( $done_rows as $r ) {
 				$total = $total_per_sestka[ $r->sestka_id ] ?? 0;
 				if ( $total > 0 && (int) $r->done >= $total ) {
 					$splneno_sestky[ $r->kompetence_id ][ $r->sestka_id ] = true;
 				}
 			}
+		}
+		// Sestavit seznam vedoucích z edit_sestky pro garant dropdown
+		$garant_options = [];
+		if ( ! empty( $edit_sestky ) ) {
+			$edit_sestka_ids_list = implode( ',', array_map( 'intval', array_column( $edit_sestky, 'id' ) ) );
+			$vedouci_rows = $wpdb->get_results(
+				"SELECT DISTINCT v.user_id FROM {$wpdb->prefix}vo_vedouci v WHERE v.sestka_id IN ($edit_sestka_ids_list)"
+			) ?: [];
+			foreach ( $vedouci_rows as $vr ) {
+				$jmeno = $this->get_vedouci_jmeno( (int) $vr->user_id );
+				if ( $jmeno ) $garant_options[] = $jmeno;
+			}
+			sort( $garant_options );
 		}
 		$by_stupen = [];
 		foreach ( $kompetence as $k ) $by_stupen[ $k->stupen ][] = $k;
@@ -2645,7 +2859,7 @@ class VlcciOdborky {
 				echo '<input type="hidden" name="kompetence_id" value="' . $k->id . '">';
 				foreach ( $edit_sestky as $s ) {
 					$done = $splneno_sestky[ $k->id ][ $s->id ] ?? false;
-					$dis  = $done ? ' disabled title="Všechna vlčata již mají splněno"' : '';
+					$dis  = $done ? ' disabled title="Všichni členové již mají splněno"' : '';
 					$sty  = $done ? ' style="opacity:.45"' : '';
 					echo '<label class="voa-sprava-check"' . $sty . '><input type="checkbox" name="sestka_ids[]" value="' . $s->id . '"' . $dis . '> ' . esc_html( $s->nazev ) . '</label>';
 				}
@@ -2655,7 +2869,13 @@ class VlcciOdborky {
 					echo '<form method="post" class="voa-sprava-garant">' . $this->app_nonce( 'save_stezka_garant' ) . $this->app_base_field();
 					echo '<input type="hidden" name="_vo_app_action" value="save_stezka_garant">';
 					echo '<input type="hidden" name="kompetence_id" value="' . $k->id . '">';
-					echo '<input type="text" name="garant" value="' . esc_attr( $k->garant ?? '' ) . '" class="voa-input voa-input--sm" style="width:90px" placeholder="Garant">';
+					echo '<select name="garant" class="voa-input voa-input--sm" style="width:110px">';
+					echo '<option value="">— žádný —</option>';
+					foreach ( $garant_options as $gname ) {
+						$sel = ( ( $k->garant ?? '' ) === $gname ) ? ' selected' : '';
+						echo '<option value="' . esc_attr( $gname ) . '"' . $sel . '>' . esc_html( $gname ) . '</option>';
+					}
+					echo '</select>';
 					echo ' <button class="voa-btn voa-btn-sm voa-btn-primary">OK</button></form>';
 				}
 				echo '</div>';
@@ -2666,14 +2886,14 @@ class VlcciOdborky {
 	private function app_page_stezka_dite(): void {
 		global $wpdb;
 		$dite_id = intval( $_GET['dite_id'] ?? 0 );
-		if ( ! $dite_id ) { echo '<div class="voa-empty">Vyberte vlče.</div>'; return; }
+		if ( ! $dite_id ) { echo '<div class="voa-empty">Vyberte člena.</div>'; return; }
 		$d = $wpdb->get_row( $wpdb->prepare(
 			"SELECT d.*, s.nazev AS sestka_nazev, o.nazev AS oddil_nazev FROM {$wpdb->prefix}vo_deti d
 			 LEFT JOIN {$wpdb->prefix}vo_sestky s ON s.id=d.sestka_id
 			 LEFT JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE d.id=%d", $dite_id
 		) );
-		if ( ! $d ) { echo '<div class="voa-empty">Vlče nenalezeno.</div>'; return; }
-		if ( $d->clen_typ !== 'vlce' ) { echo '<div class="voa-empty">Stezky jsou dostupné pouze pro vlčata.</div>'; return; }
+		if ( ! $d ) { echo '<div class="voa-empty">Člen nenalezen.</div>'; return; }
+		if ( ! in_array( $d->clen_typ, [ 'vlce', 'svetluska' ], true ) ) { echo '<div class="voa-empty">Stezky jsou dostupné pouze pro vlčata a světlušky.</div>'; return; }
 		$can_edit = $this->can_edit_sestka( (int)$d->sestka_id );
 		$milniky_rows = $wpdb->get_results( $wpdb->prepare(
 			"SELECT typ, datum FROM {$wpdb->prefix}vo_stezky_milniky WHERE dite_id=%d", $dite_id
@@ -2692,16 +2912,20 @@ class VlcciOdborky {
 		};
 		$plneni = [];
 		foreach ( $plneni_rows as $p ) $plneni[ $p->kompetence_id ][] = $p;
-		$kompetence = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}vo_stezky_kompetence ORDER BY poradi" ) ?: [];
+		$komp_typ   = $d->clen_typ === 'svetluska' ? 'svetlusky' : 'vlcata';
+		$kompetence = $wpdb->get_results( $wpdb->prepare(
+			"SELECT * FROM {$wpdb->prefix}vo_stezky_kompetence WHERE typ=%s ORDER BY poradi", $komp_typ
+		) ) ?: [];
 		$stupne = $this->stezky_stupne();
 		echo '<div class="voa-page-header"><a href="' . esc_url( $this->app_url( 'stezky', [ 'sestka_id' => $d->sestka_id ] ) ) . '" class="voa-back">← Stezky</a>';
 		echo '<h1 class="voa-page-title" style="margin:4px 0">🗺️ ' . esc_html( $d->prezdivka ) . '</h1>';
 		echo '<p class="voa-muted">' . esc_html( $d->jmeno . ' ' . $d->prijmeni ) . ' — ' . esc_html( $d->oddil_nazev . ' / ' . $d->sestka_nazev ) . '</p></div>';
+		$slib_label = $d->clen_typ === 'svetluska' ? 'Slib světlušky složen' : 'Slib vlčete složen';
 		// souhrn stupňů
 		echo '<div class="voa-stezky-souhrn">';
-		$nov = $this->stezky_progress( $dite_id, 'novacek' );
+		$nov = $this->stezky_progress( $dite_id, 'novacek', $komp_typ );
 		foreach ( $stupne as $sk => $sl ) {
-			$p   = $this->stezky_progress( $dite_id, $sk );
+			$p   = $this->stezky_progress( $dite_id, $sk, $komp_typ );
 			$pct = $p['total'] ? round( $p['done'] / $p['total'] * 100 ) : 0;
 			$cls = $p['splneno'] ? ' voa-stezky-card--done' : '';
 			echo '<div class="voa-stezky-card' . $cls . '"><div class="voa-stezky-card-title">' . esc_html( $sl ) . '</div>';
@@ -2712,14 +2936,14 @@ class VlcciOdborky {
 		// milníky
 		echo '<div class="voa-card" style="margin-bottom:20px"><h3 class="voa-card-title">🏆 Milníky</h3>';
 		$milniky_def = [
-			'slib'      => [ 'label' => 'Slib vlčete složen',   'unlock_stupen' => 'novacek' ],
-			'nasivka_1' => [ 'label' => 'Nášivka 1. stupně předána', 'unlock_stupen' => '1' ],
-			'nasivka_2' => [ 'label' => 'Nášivka 2. stupně předána', 'unlock_stupen' => '2' ],
-			'nasivka_3' => [ 'label' => 'Nášivka 3. stupně předána', 'unlock_stupen' => '3' ],
+			'slib'      => [ 'label' => $slib_label,                   'unlock_stupen' => 'novacek' ],
+			'nasivka_1' => [ 'label' => 'Nášivka 1. stupně předána',   'unlock_stupen' => '1' ],
+			'nasivka_2' => [ 'label' => 'Nášivka 2. stupně předána',   'unlock_stupen' => '2' ],
+			'nasivka_3' => [ 'label' => 'Nášivka 3. stupně předána',   'unlock_stupen' => '3' ],
 		];
 		echo '<table class="voa-table"><thead><tr><th>Milník</th><th>Stav</th><th>Datum</th>' . ( $can_edit ? '<th></th>' : '' ) . '</tr></thead><tbody>';
 		foreach ( $milniky_def as $typ => $def ) {
-			$pr_unlock = $this->stezky_progress( $dite_id, $def['unlock_stupen'] );
+			$pr_unlock = $this->stezky_progress( $dite_id, $def['unlock_stupen'], $komp_typ );
 			$splneno_predpoklad = $pr_unlock['splneno'];
 			$zaznam = isset( $m[ $typ ] );
 			echo '<tr><td>' . esc_html( $def['label'] ) . '</td>';
@@ -2757,7 +2981,7 @@ class VlcciOdborky {
 		foreach ( $kompetence as $k ) $by_stupen[ $k->stupen ][] = $k;
 		foreach ( $stupne as $sk => $sl ) {
 			if ( empty( $by_stupen[ $sk ] ) ) continue;
-			$p_st    = $this->stezky_progress( $dite_id, $sk );
+			$p_st    = $this->stezky_progress( $dite_id, $sk, $komp_typ );
 			$open    = $p_st['splneno'] ? '' : ' open';
 			$summary = esc_html( $sl ) . ' — ' . $p_st['done'] . '/' . $p_st['total'] . ( $p_st['splneno'] ? ' ✅' : '' );
 			echo '<details' . $open . ' class="voa-card" style="margin-bottom:20px"><summary class="voa-card-title" style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px"><span class="voa-details-arrow">▶</span>' . $summary . '</summary>';
@@ -2942,14 +3166,14 @@ class VlcciOdborky {
 			echo '</div>';
 			$deti    = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 ORDER BY prijmeni, jmeno", $s->id ) ) ?: [];
 			$odborky = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}vo_odborky WHERE (typ='oba' OR typ=%s) ORDER BY nazev", $s->typ ) ) ?: [];
-			// stezky: počet kompetencí celkem a splněných per dítě (jen vlčata)
+			// stezky: počet kompetencí celkem a splněných per dítě
 			$deti_ids = array_map( fn($d) => (int)$d->id, $deti );
 			$stezky_done = [];
-			if ( ! empty( $deti_ids ) && $s->typ === 'vlcata' ) {
-				$total_komp = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_kompetence" );
+			if ( ! empty( $deti_ids ) && in_array( $s->typ, [ 'vlcata', 'svetlusky' ], true ) ) {
+				$total_komp = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_kompetence WHERE typ=%s", $s->typ ) );
 				$ids_list   = implode( ',', $deti_ids );
 				$rows = $wpdb->get_results(
-					"SELECT dite_id, COUNT(DISTINCT kompetence_id) AS done FROM {$wpdb->prefix}vo_stezky_plneni WHERE dite_id IN ($ids_list) GROUP BY dite_id"
+					"SELECT sp.dite_id, COUNT(DISTINCT sp.kompetence_id) AS done FROM {$wpdb->prefix}vo_stezky_plneni sp JOIN {$wpdb->prefix}vo_stezky_kompetence k ON k.id=sp.kompetence_id WHERE sp.dite_id IN ($ids_list) AND k.typ='{$s->typ}' GROUP BY sp.dite_id"
 				) ?: [];
 				foreach ( $rows as $r ) $stezky_done[ $r->dite_id ] = [ 'done' => (int)$r->done, 'total' => $total_komp ];
 			}
