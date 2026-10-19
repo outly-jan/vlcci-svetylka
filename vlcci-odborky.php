@@ -33,6 +33,7 @@ class VlcciOdborky {
 		$this->migrate_stezky_v7();
 		$this->migrate_stezky_plneni_v8();
 		$this->migrate_stezky_svetlusky_v9();
+		$this->migrate_akce_typ_v10();
 	}
 
 	private function migrate_stezky_plneni_v8(): void {
@@ -74,6 +75,18 @@ class VlcciOdborky {
 			}
 		}
 		update_option( 'vo_migration_stezky_svetlusky_v9', '1' );
+	}
+
+	private function migrate_akce_typ_v10(): void {
+		if ( get_option( 'vo_migration_akce_typ_v10' ) ) return;
+		global $wpdb;
+		$col = $wpdb->get_results( "SHOW COLUMNS FROM {$wpdb->prefix}vo_stezky_plneni LIKE 'akce_typ'" );
+		if ( empty( $col ) ) {
+			$wpdb->query( "ALTER TABLE {$wpdb->prefix}vo_stezky_plneni ADD COLUMN akce_typ enum('schuzka','vyprava','jina') DEFAULT NULL AFTER vedouci_id" );
+		}
+		// Záznamy od 14.9.2026 považujeme za schůzky
+		$wpdb->query( "UPDATE {$wpdb->prefix}vo_stezky_plneni SET akce_typ='schuzka' WHERE datum >= '2026-09-14' AND akce_typ IS NULL" );
+		update_option( 'vo_migration_akce_typ_v10', '1' );
 	}
 
 	private function migrate_nasivky_v5(): void {
@@ -2104,6 +2117,7 @@ class VlcciOdborky {
 			case 'hromadne_stezka':        $this->app_do_hromadne_stezka( $base );        break;
 			case 'zrusit_stezka_stupen':   $this->app_do_zrusit_stezka_stupen( $base );   break;
 			case 'hromadne_stezka_deti':   $this->app_do_hromadne_stezka_deti( $base );   break;
+			case 'zapsat_skupinove':       $this->app_do_zapsat_skupinove( $base );       break;
 			case 'save_stezka_milnik':     $this->app_do_save_stezka_milnik( $base );     break;
 			case 'delete_stezka_milnik':     $this->app_do_delete_stezka_milnik( $base );     break;
 			case 'save_stezka_garant':       $this->app_do_save_stezka_garant( $base );       break;
@@ -2324,7 +2338,7 @@ class VlcciOdborky {
 			case 'po_odborkach':  $this->app_page_po_odborkach();  break;
 			case 'nasivky':       $this->app_page_nasivky();       break;
 			case 'stezky':        $this->app_page_stezky();        break;
-			case 'zapsat_stezku': $this->app_page_zapsat_stezku(); break;
+			case 'zapsat_stezku': $this->app_page_zapsat_stezku_wrapper(); break;
 			case 'stezka_dite':   $this->app_page_stezka_dite();   break;
 			case 'ukoly':         $this->app_page_ukoly();         break;
 			case 'deti':          $this->app_page_deti();          break;
@@ -2502,8 +2516,184 @@ class VlcciOdborky {
 			) );
 			$count += (int) $rows;
 		}
-		$this->app_set_flash( 'Kompetence uznána ' . $count . ' vlčatům.' );
+		$this->app_set_flash( 'Kompetence uznána ' . $count . ' členům.' );
 		$this->app_redirect( $base, 'zapsat_stezku', [ 'kompetence_id' => $kompetence_id ] );
+	}
+
+	private function app_do_zapsat_skupinove( string $base ): void {
+		global $wpdb;
+		$datum        = sanitize_text_field( $_POST['datum'] ?? '' );
+		$akce_typ_raw = sanitize_key( $_POST['akce_typ'] ?? '' );
+		$akce_typ     = in_array( $akce_typ_raw, [ 'schuzka', 'vyprava', 'jina' ], true ) ? $akce_typ_raw : 'schuzka';
+		$dite_ids     = array_map( 'intval', (array) ( $_POST['dite_ids'] ?? [] ) );
+		$komp_ids     = array_map( 'intval', (array) ( $_POST['kompetence_ids'] ?? [] ) );
+		if ( ! $datum || empty( $dite_ids ) || empty( $komp_ids ) ) {
+			$this->app_set_flash( 'Vyplňte datum a vyberte alespoň jednoho člena a jednu kompetenci.', 'error' );
+			$this->app_redirect( $base, 'zapsat_stezku', [ 'subtab' => 'skupinove' ] );
+		}
+		$vedouci = get_current_user_id();
+		$count   = 0;
+		foreach ( $dite_ids as $dite_id ) {
+			$d = $wpdb->get_row( $wpdb->prepare( "SELECT sestka_id FROM {$wpdb->prefix}vo_deti WHERE id=%d AND aktivni=1", $dite_id ) );
+			if ( ! $d || ! $this->can_edit_sestka( (int) $d->sestka_id ) ) continue;
+			foreach ( $komp_ids as $komp_id ) {
+				$exists = (int) $wpdb->get_var( $wpdb->prepare(
+					"SELECT COUNT(*) FROM {$wpdb->prefix}vo_stezky_plneni WHERE dite_id=%d AND kompetence_id=%d AND datum=%s",
+					$dite_id, $komp_id, $datum
+				) );
+				if ( $exists ) continue;
+				$wpdb->insert( "{$wpdb->prefix}vo_stezky_plneni", [
+					'dite_id'       => $dite_id,
+					'kompetence_id' => $komp_id,
+					'datum'         => $datum,
+					'poznamka'      => '',
+					'vedouci_id'    => $vedouci,
+					'akce_typ'      => $akce_typ,
+				] );
+				$count++;
+			}
+		}
+		$akce_labels = [ 'schuzka' => 'schůzku', 'vyprava' => 'výpravu', 'jina' => 'akci' ];
+		$this->app_set_flash( 'Zapsáno ' . $count . ' splnění za ' . ( $akce_labels[ $akce_typ ] ?? 'akci' ) . ' ' . esc_html( $datum ) . '.' );
+		$this->app_redirect( $base, 'zapsat_stezku', [ 'subtab' => 'skupinove' ] );
+	}
+
+	private function app_page_zapsat_skupinove(): void {
+		global $wpdb;
+		// Zjisti aktivní typ pro tohoto uživatele
+		$is_admin   = $this->is_admin();
+		$force_typ  = sanitize_key( $_GET['komp_typ'] ?? '' );
+		if ( $force_typ && in_array( $force_typ, [ 'vlcata', 'svetlusky' ], true ) ) {
+			$komp_typ = $force_typ;
+		} elseif ( $is_admin ) {
+			$komp_typ = 'vlcata'; // admin: výchozí vlčata
+		} else {
+			// Vedoucí: zjisti typ z jeho šestek
+			$uid = get_current_user_id();
+			$sestka_typ = $wpdb->get_var( $wpdb->prepare(
+				"SELECT o.typ FROM {$wpdb->prefix}vo_vedouci v
+				 JOIN {$wpdb->prefix}vo_sestky s ON s.id=v.sestka_id
+				 JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id
+				 WHERE v.user_id=%d LIMIT 1", $uid
+			) );
+			$komp_typ = $sestka_typ ?: 'vlcata';
+		}
+		$clen_typ = $komp_typ === 'svetlusky' ? 'svetluska' : 'vlce';
+		// Šestky
+		$all_sestky = $wpdb->get_results( $wpdb->prepare(
+			"SELECT s.id, s.nazev, o.nazev AS oddil_nazev FROM {$wpdb->prefix}vo_sestky s
+			 JOIN {$wpdb->prefix}vo_oddily o ON o.id=s.oddil_id WHERE o.typ=%s ORDER BY o.nazev, s.nazev", $komp_typ
+		) ) ?: [];
+		$edit_sestky = array_values( array_filter( $all_sestky, fn($s) => $this->can_edit_sestka( (int)$s->id ) ) );
+		// Kompetence
+		$kompetence_all = $wpdb->get_results( $wpdb->prepare(
+			"SELECT * FROM {$wpdb->prefix}vo_stezky_kompetence WHERE typ=%s ORDER BY poradi", $komp_typ
+		) ) ?: [];
+		$stupne = $this->stezky_stupne();
+		$typ_label = $komp_typ === 'svetlusky' ? '🔦 Světlušky' : '🐺 Vlčata';
+		echo '<h2 class="voa-page-title" style="margin-bottom:4px">👥 Skupinové plnění</h2>';
+		// Admin: přepínač typů
+		if ( $is_admin ) {
+			$other_typ = $komp_typ === 'vlcata' ? 'svetlusky' : 'vlcata';
+			$other_label = $komp_typ === 'vlcata' ? '🔦 Světlušky' : '🐺 Vlčata';
+			$switch_url = esc_url( add_query_arg( [ 'subtab' => 'skupinove', 'komp_typ' => $other_typ ], $this->app_url( 'zapsat_stezku' ) ) );
+			echo '<p class="voa-muted" style="margin-bottom:16px">Zobrazuji: <strong>' . esc_html( $typ_label ) . '</strong> <a href="' . $switch_url . '" class="voa-btn voa-btn-sm voa-btn-secondary" style="margin-left:8px">Přepnout na ' . esc_html( $other_label ) . '</a></p>';
+		}
+		if ( empty( $edit_sestky ) ) { echo '<div class="voa-empty">Žádné šestky.</div>'; return; }
+		echo '<form method="post">' . $this->app_nonce( 'zapsat_skupinove' ) . $this->app_base_field();
+		echo '<input type="hidden" name="_vo_app_action" value="zapsat_skupinove">';
+		// Datum a typ akce
+		echo '<div class="voa-card" style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end">';
+		echo '<label class="voa-form-label" style="flex:0 0 auto">📅 Datum akce<br><input type="date" name="datum" value="' . esc_attr( gmdate( 'Y-m-d' ) ) . '" class="voa-input" required></label>';
+		echo '<label class="voa-form-label" style="flex:0 0 auto">Typ akce<br><select name="akce_typ" class="voa-input">';
+		echo '<option value="schuzka">📋 Schůzka</option>';
+		echo '<option value="vyprava">🏕️ Výprava</option>';
+		echo '<option value="jina">⭐ Jiná akce</option>';
+		echo '</select></label>';
+		echo '</div>';
+		echo '<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">';
+		// Levý panel: účastníci
+		echo '<div class="voa-card" style="flex:1 1 260px;min-width:220px">';
+		echo '<h3 class="voa-card-title" style="margin-bottom:12px">👤 Účastníci</h3>';
+		foreach ( $edit_sestky as $s ) {
+			$deti = $wpdb->get_results( $wpdb->prepare(
+				"SELECT * FROM {$wpdb->prefix}vo_deti WHERE sestka_id=%d AND aktivni=1 AND clen_typ=%s ORDER BY prijmeni, jmeno", $s->id, $clen_typ
+			) ) ?: [];
+			if ( empty( $deti ) ) continue;
+			echo '<div style="margin-bottom:12px">';
+			echo '<div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:4px">' . esc_html( $s->oddil_nazev . ' — ' . $s->nazev ) . '</div>';
+			foreach ( $deti as $d ) {
+				echo '<label class="voa-checkbox" style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer">';
+				echo '<input type="checkbox" name="dite_ids[]" value="' . $d->id . '"> ';
+				echo '<strong>' . esc_html( $d->prezdivka ) . '</strong> <span class="voa-muted" style="font-size:12px">' . esc_html( $d->prijmeni . ' ' . $d->jmeno ) . '</span>';
+				echo '</label>';
+			}
+			echo '</div>';
+		}
+		echo '<div style="margin-top:8px;border-top:1px solid #e5e7eb;padding-top:8px">';
+		echo '<label class="voa-checkbox" style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#6b7280">';
+		echo '<input type="checkbox" id="voa-check-all-deti"> Vybrat vše / zrušit výběr</label></div>';
+		echo '</div>';
+		// Pravý panel: kompetence
+		echo '<div class="voa-card" style="flex:2 1 340px">';
+		echo '<h3 class="voa-card-title" style="margin-bottom:12px">📚 Kompetence</h3>';
+		$by_stupen = [];
+		foreach ( $kompetence_all as $k ) $by_stupen[ $k->stupen ][] = $k;
+		foreach ( $stupne as $sk => $sl ) {
+			if ( empty( $by_stupen[ $sk ] ) ) continue;
+			echo '<details style="margin-bottom:8px" open>';
+			echo '<summary style="cursor:pointer;font-weight:600;font-size:13px;padding:4px 0;list-style:none;display:flex;align-items:center;gap:6px"><span>▶</span>' . esc_html( $sl ) . '</summary>';
+			echo '<div style="padding:4px 0 4px 12px">';
+			foreach ( $by_stupen[ $sk ] as $k ) {
+				echo '<label class="voa-checkbox" style="display:flex;align-items:flex-start;gap:6px;padding:3px 0;cursor:pointer">';
+				echo '<input type="checkbox" name="kompetence_ids[]" value="' . $k->id . '" style="margin-top:3px"> ';
+				echo '<span><span class="voa-muted" style="font-size:11px">' . esc_html( $k->oblast ) . ' · </span><strong style="font-size:13px">' . esc_html( $k->okruh ) . '</strong></span>';
+				echo '</label>';
+			}
+			echo '<div style="margin-top:4px">';
+			echo '<label class="voa-checkbox" style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:#6b7280">';
+			echo '<input type="checkbox" class="voa-check-all-stupen" data-stupen="' . esc_attr( $sk ) . '"> Vybrat celý stupeň</label></div>';
+			echo '</div></details>';
+		}
+		echo '</div>'; // pravý panel
+		echo '</div>'; // flex row
+		echo '<div style="margin-top:16px"><button type="submit" class="voa-btn voa-btn-primary" style="font-size:15px;padding:10px 24px">✅ Zapsat splnění</button></div>';
+		echo '</form>';
+		// JS pro "vybrat vše"
+		echo '<script>
+		document.getElementById("voa-check-all-deti").addEventListener("change",function(){
+			document.querySelectorAll("input[name=\'dite_ids[]\']").forEach(c=>c.checked=this.checked);
+		});
+		document.querySelectorAll(".voa-check-all-stupen").forEach(function(cb){
+			cb.addEventListener("change",function(){
+				var sk=this.dataset.stupen;
+				this.closest("details").querySelectorAll("input[name=\'kompetence_ids[]\']").forEach(c=>c.checked=this.checked);
+			});
+		});
+		// Sbalování details s rotací šipky
+		document.querySelectorAll("details").forEach(function(d){
+			d.addEventListener("toggle",function(){
+				var arr=this.querySelector("summary span");
+				if(arr) arr.textContent=this.open?"▼":"▶";
+			});
+		});
+		</script>';
+	}
+
+	private function app_page_zapsat_stezku_wrapper(): void {
+		$subtab = $_GET['subtab'] ?? 'individualni';
+		$base_url = $this->app_url( 'zapsat_stezku' );
+		echo '<div class="voa-subtabs" style="display:flex;gap:4px;margin-bottom:20px;border-bottom:2px solid #e5e7eb;padding-bottom:0">';
+		foreach ( [ 'individualni' => '📋 Individuální plnění', 'skupinove' => '👥 Skupinové plnění' ] as $key => $label ) {
+			$active = $subtab === $key ? ' style="border-bottom:2px solid #166534;margin-bottom:-2px;font-weight:600;color:#166534"' : ' style="color:#6b7280"';
+			echo '<a href="' . esc_url( add_query_arg( 'subtab', $key, $base_url ) ) . '" class="voa-subtab"' . $active . '>' . esc_html( $label ) . '</a>';
+		}
+		echo '</div>';
+		if ( $subtab === 'skupinove' ) {
+			$this->app_page_zapsat_skupinove();
+		} else {
+			$this->app_page_zapsat_stezku();
+		}
 	}
 
 	private function app_page_zapsat_stezku(): void {
@@ -2903,7 +3093,7 @@ class VlcciOdborky {
 		$m = [];
 		foreach ( $milniky_rows as $mk ) $m[ $mk->typ ] = $mk->datum;
 		$plneni_rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT sp.id, sp.kompetence_id, sp.datum, sp.poznamka, sp.vedouci_id
+			"SELECT sp.id, sp.kompetence_id, sp.datum, sp.poznamka, sp.vedouci_id, sp.akce_typ
 			 FROM {$wpdb->prefix}vo_stezky_plneni sp
 			 WHERE sp.dite_id=%d ORDER BY sp.kompetence_id, sp.datum", $dite_id
 		) ) ?: [];
@@ -3009,7 +3199,8 @@ class VlcciOdborky {
 						foreach ( $zaznamy as $pr ) {
 							$kdo = $pr->vedouci_id ? ' · ' . esc_html( $get_vj( (int)$pr->vedouci_id ) ) : '';
 							$poz = $pr->poznamka ? ' · ' . esc_html( $pr->poznamka ) : '';
-							echo '<div class="voa-stezka-meta" style="display:flex;align-items:center;gap:8px">📅 ' . esc_html( $pr->datum ) . $poz . $kdo;
+							$akce_icon = match( $pr->akce_typ ?? '' ) { 'schuzka' => '📋', 'vyprava' => '🏕️', 'jina' => '⭐', default => '📅' };
+							echo '<div class="voa-stezka-meta" style="display:flex;align-items:center;gap:8px">' . $akce_icon . ' ' . esc_html( $pr->datum ) . $poz . $kdo;
 							if ( $can_edit ) {
 								echo ' <form method="post" style="display:inline;margin:0">' . $this->app_nonce( 'delete_stezka_plneni_one' ) . $this->app_base_field();
 								echo '<input type="hidden" name="_vo_app_action" value="delete_stezka_plneni_one">';
